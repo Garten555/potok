@@ -16,8 +16,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
 import { plyrRuI18n } from "@/lib/plyr-ru";
 import { StudioSidebar } from "@/components/studio/studio-sidebar";
+import { StudioChannelAppearancePanel } from "@/components/studio/studio-channel-appearance-panel";
+import { StudioIncomingReports } from "@/components/studio/studio-incoming-reports";
 import { StudioStatsView } from "@/components/studio/stats-view";
 import {
   StudioContentView,
@@ -84,6 +87,13 @@ function parseVideoTagsInput(raw: string): { tags: string[]; error?: string } {
     }
   }
   return { tags };
+}
+
+/** PostgREST при отсутствии колонки в кэше схемы (миграция не применена). */
+function isMissingPhotosensitiveColumnError(err: { message?: string; code?: string } | null | undefined): boolean {
+  if (!err?.message) return false;
+  const m = err.message.toLowerCase();
+  return m.includes("photosensitive_warning") || (m.includes("column") && m.includes("schema"));
 }
 
 type PlaylistFieldErrors = {
@@ -267,6 +277,7 @@ function StudioInner() {
   const [playlistFieldErrors, setPlaylistFieldErrors] = useState<PlaylistFieldErrors>({});
   const [isPublishing, setIsPublishing] = useState(false);
   const [visibility, setVisibility] = useState<Visibility>("public");
+  const [photosensitiveWarning, setPhotosensitiveWarning] = useState(false);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [ownVideos, setOwnVideos] = useState<StudioVideoPickRow[]>([]);
@@ -286,7 +297,9 @@ function StudioInner() {
   const [isAddingVideosToPlaylist, setIsAddingVideosToPlaylist] = useState(false);
   const [playlistActionMessage, setPlaylistActionMessage] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
-  const [activeNav, setActiveNav] = useState<"upload" | "content" | "playlists" | "stats">("upload");
+  const [activeNav, setActiveNav] = useState<
+    "upload" | "content" | "playlists" | "stats" | "channel_home" | "incoming_reports"
+  >("upload");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const previewUrlRef = useRef("");
   const thumbnailPreviewUrlRef = useRef("");
@@ -319,6 +332,10 @@ function StudioInner() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [editFieldErrors, setEditFieldErrors] = useState<EditVideoFieldErrors>({});
+  const [editPhotosensitiveWarning, setEditPhotosensitiveWarning] = useState(false);
+  const [studioContentQuery, setStudioContentQuery] = useState("");
+  const [studioContentVisibility, setStudioContentVisibility] = useState<"all" | Visibility>("all");
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
 
   const sp = useSearchParams();
 
@@ -336,6 +353,8 @@ function StudioInner() {
     else if (tab === "playlists") setActiveNav("playlists");
     else if (tab === "content") setActiveNav("content");
     else if (tab === "stats") setActiveNav("stats");
+    else if (tab === "channel-home") setActiveNav("channel_home");
+    else if (tab === "incoming-reports") setActiveNav("incoming_reports");
   }, [sp]);
 
   useEffect(() => {
@@ -742,7 +761,7 @@ function StudioInner() {
 
       const { data: videoData } = await supabase
         .from("videos")
-        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id")
+        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id, photosensitive_warning")
         .eq("user_id", userData.user.id)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -799,6 +818,23 @@ function StudioInner() {
     const suggested = suggestCategoryId(title, description, categories);
     if (suggested) setCategoryId(suggested);
   }, [title, description, categories, isCategoryManuallySelected]);
+
+  const filteredStudioContent = useMemo(() => {
+    const byVisibility = contentItems.filter((item) => {
+      const vis = item.visibility ?? "public";
+      if (studioContentVisibility !== "all" && vis !== studioContentVisibility) return false;
+      return true;
+    });
+    return fuzzyFilterEntities(
+      byVisibility,
+      (item) => item.id,
+      (item) => {
+        const tags = ((item.tags ?? []) as string[]).join(" ");
+        return [item.title, item.description ?? "", tags];
+      },
+      studioContentQuery,
+    );
+  }, [contentItems, studioContentQuery, studioContentVisibility]);
 
   const source = useMemo(() => {
     if (!previewUrl) return null;
@@ -884,22 +920,40 @@ function StudioInner() {
       const thumbnailUrl = await uploadStudioFile(selectedThumbnailFile as File, userId, "thumbnail");
 
       const supabase = createSupabaseBrowserClient();
-      const { data: insertedVideo, error: insertError } = await supabase
-        .from("videos")
-        .insert({
-          user_id: userId,
-          title: title.trim(),
-          description: description.trim() || null,
-          category_id: categoryId,
-          tags: tagParse.tags,
-          video_url: videoUrl,
-          thumbnail_url: thumbnailUrl,
-          visibility,
-        })
-        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id")
-        .single();
+      const baseInsert = {
+        user_id: userId,
+        title: title.trim(),
+        description: description.trim() || null,
+        category_id: categoryId,
+        tags: tagParse.tags,
+        video_url: videoUrl,
+        thumbnail_url: thumbnailUrl,
+        visibility,
+        photosensitive_warning: photosensitiveWarning,
+      };
 
-      if (insertError) {
+      const insertRes = await supabase
+        .from("videos")
+        .insert(baseInsert)
+        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id, photosensitive_warning")
+        .single();
+      let insertError = insertRes.error;
+      let insertedVideo: ContentItem | null = insertRes.data as ContentItem | null;
+
+      if (insertError && isMissingPhotosensitiveColumnError(insertError)) {
+        const { photosensitive_warning: _ps, ...withoutPs } = baseInsert;
+        const retry = await supabase
+          .from("videos")
+          .insert(withoutPs)
+          .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id")
+          .single();
+        insertError = retry.error;
+        insertedVideo = retry.data
+          ? ({ ...(retry.data as Record<string, unknown>), photosensitive_warning: photosensitiveWarning } as ContentItem)
+          : null;
+      }
+
+      if (insertError || !insertedVideo) {
         setError("Не удалось опубликовать видео.");
         return;
       }
@@ -910,6 +964,7 @@ function StudioInner() {
       setTagsInput("");
       setCategoryId("");
       setVisibility("public");
+      setPhotosensitiveWarning(false);
       setVideoFile(null);
       setThumbnailFile(null);
       replacePreviewFromFile(null);
@@ -1142,8 +1197,11 @@ function StudioInner() {
     setEditingVideoId(item.id);
     setEditTitle(item.title);
     setEditDescription(item.description ?? "");
+    const tags = (item.tags ?? []) as string[];
+    setEditTagsInput(tags.map((t) => (t.startsWith("#") ? t : `#${t}`)).join(" "));
     setEditCategoryId(item.category_id ?? "");
     setEditVisibility(item.visibility ?? "public");
+    setEditPhotosensitiveWarning(Boolean((item as { photosensitive_warning?: boolean }).photosensitive_warning));
     setEditThumbnailFile(null);
     setEditError("");
     setEditFieldErrors({});
@@ -1196,22 +1254,41 @@ function StudioInner() {
         visibility: Visibility;
         tags: string[];
         thumbnail_url?: string;
+        photosensitive_warning: boolean;
       } = {
         title: normalizedTitle,
         description: normalizedDescription || null,
         category_id: editCategoryId,
         visibility: editVisibility,
         tags: editTagParse.tags,
+        photosensitive_warning: editPhotosensitiveWarning,
       };
       if (thumbnailUrl) updatePayload.thumbnail_url = thumbnailUrl;
 
-      const { data, error } = await supabase
+      const updRes = await supabase
         .from("videos")
         .update(updatePayload)
         .eq("id", editingVideoId)
         .eq("user_id", userId)
-        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id")
+        .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id, photosensitive_warning")
         .single();
+      let error = updRes.error;
+      let data: ContentItem | null = updRes.data as ContentItem | null;
+
+      if (error && isMissingPhotosensitiveColumnError(error)) {
+        const { photosensitive_warning: _p, ...withoutPs } = updatePayload;
+        const retry = await supabase
+          .from("videos")
+          .update(withoutPs)
+          .eq("id", editingVideoId)
+          .eq("user_id", userId)
+          .select("id, title, description, tags, created_at, visibility, views, thumbnail_url, category_id")
+          .single();
+        error = retry.error;
+        data = retry.data
+          ? ({ ...(retry.data as Record<string, unknown>), photosensitive_warning: editPhotosensitiveWarning } as ContentItem)
+          : null;
+      }
 
       if (error || !data) {
         setEditError("Не удалось сохранить изменения.");
@@ -1230,6 +1307,28 @@ function StudioInner() {
       setEditError("Ошибка сохранения.");
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: string) => {
+    if (!userId) return;
+    if (!window.confirm("Удалить это видео безвозвратно? Его нельзя будет восстановить.")) return;
+    setDeletingVideoId(videoId);
+    setError("");
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: delErr } = await supabase.from("videos").delete().eq("id", videoId).eq("user_id", userId);
+      if (delErr) {
+        setError(delErr.message || "Не удалось удалить видео.");
+        return;
+      }
+      setContentItems((prev) => prev.filter((v) => v.id !== videoId));
+      setOwnVideos((prev) => prev.filter((v) => v.id !== videoId));
+      if (editingVideoId === videoId) cancelEditVideo();
+      setSuccess("Видео удалено.");
+      window.setTimeout(() => setSuccess(""), 4000);
+    } finally {
+      setDeletingVideoId(null);
     }
   };
 
@@ -1260,7 +1359,11 @@ function StudioInner() {
                 ? "Ваши видео"
                 : activeNav === "stats"
                   ? "Статистика"
-                  : "Плейлисты"}
+                  : activeNav === "channel_home"
+                    ? "Внешний вид канала"
+                    : activeNav === "incoming_reports"
+                      ? "Жалобы на контент"
+                      : "Плейлисты"}
           </p>
         </div>
         <Link
@@ -1398,6 +1501,18 @@ function StudioInner() {
                       <option value="unlisted">Доступ по ссылке</option>
                       <option value="private">Приватное</option>
                     </select>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={photosensitiveWarning}
+                      onChange={(e) => setPhotosensitiveWarning(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-[#0b1120] text-cyan-500 focus:ring-cyan-400/40"
+                    />
+                    <span className="text-sm leading-snug text-amber-100/95">
+                      Предупреждение о вспышках / фоточувствительности (эпилепсия): перед просмотром покажем заметку
+                      зрителям.
+                    </span>
                   </label>
                   <label className="block space-y-1">
                     <span className="text-xs text-slate-400">Заменить видео</span>
@@ -1570,7 +1685,12 @@ function StudioInner() {
           ) : null}
           {activeNav === "content" ? (
             <StudioContentView
-              contentItems={contentItems}
+              contentItems={filteredStudioContent}
+              contentTotalCount={contentItems.length}
+              studioContentQuery={studioContentQuery}
+              setStudioContentQuery={setStudioContentQuery}
+              studioContentVisibility={studioContentVisibility}
+              setStudioContentVisibility={setStudioContentVisibility}
               categories={categories}
               editingVideoId={editingVideoId}
               editTitle={editTitle}
@@ -1583,6 +1703,8 @@ function StudioInner() {
               setEditCategoryId={setEditCategoryId}
               editVisibility={editVisibility}
               setEditVisibility={setEditVisibility}
+              editPhotosensitiveWarning={editPhotosensitiveWarning}
+              setEditPhotosensitiveWarning={setEditPhotosensitiveWarning}
               editSaving={editSaving}
               editError={editError}
               editFieldErrors={editFieldErrors}
@@ -1590,6 +1712,8 @@ function StudioInner() {
               onOpenEdit={openEditVideo}
               onCancelEdit={cancelEditVideo}
               onSaveEdit={handleSaveVideoEdit}
+              onDeleteVideo={handleDeleteVideo}
+              deletingVideoId={deletingVideoId}
             />
           ) : null}
           {activeNav === "playlists" ? (
@@ -1624,6 +1748,8 @@ function StudioInner() {
               playlistActionMessage={playlistActionMessage}
             />
           ) : null}
+          {activeNav === "channel_home" ? <StudioChannelAppearancePanel /> : null}
+          {activeNav === "incoming_reports" ? <StudioIncomingReports /> : null}
         </main>
       </div>
     </div>

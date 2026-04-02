@@ -9,6 +9,12 @@ type SidebarState = {
 
 const SidebarStateContext = createContext<SidebarState | null>(null);
 
+/** Если компонент оказался вне AppShell (редкий кейс / тест) — не падаем. */
+const fallbackSidebarState: SidebarState = {
+  isOpen: false,
+  toggleSidebar: () => {},
+};
+
 type SidebarStateProviderProps = {
   value: SidebarState;
   children: React.ReactNode;
@@ -25,14 +31,7 @@ export function SidebarStateProvider({
   );
 }
 
-export function useSidebarState() {
+export function useSidebarState(): SidebarState {
   const context = useContext(SidebarStateContext);
-
-  if (!context) {
-    throw new Error(
-      "useSidebarState: провайдер SidebarStateProvider не найден выше по дереву",
-    );
-  }
-
-  return context;
+  return context ?? fallbackSidebarState;
 }

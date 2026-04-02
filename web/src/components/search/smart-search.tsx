@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { Search, History, Sparkles, Mic, Keyboard, Square } from "lucide-react";
@@ -46,6 +47,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const activeFetchId = useRef(0);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [portalReady, setPortalReady] = useState(false);
   const [showVirtualKeyboard, setShowVirtualKeyboard] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
@@ -56,10 +58,32 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const refreshHistory = () => setSearchHistory(getSearchHistory());
 
   useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!voiceHint) return;
     const t = window.setTimeout(() => setVoiceHint(null), 3200);
     return () => window.clearTimeout(t);
   }, [voiceHint]);
+
+  useEffect(() => {
+    if (!showVirtualKeyboard || isOverlay) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showVirtualKeyboard, isOverlay]);
+
+  useEffect(() => {
+    if (!showVirtualKeyboard || isOverlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowVirtualKeyboard(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showVirtualKeyboard, isOverlay]);
 
   const getSpeechRecognition = (): SpeechRecognition | null => {
     if (typeof window === "undefined") return null;
@@ -639,14 +663,6 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
             </button>
           </div>
           {voiceHint ? <p className="text-[11px] text-amber-200/90">{voiceHint}</p> : null}
-          {showVirtualKeyboard ? (
-            <VirtualKeyboard
-              compact
-              onInsert={insertFromKeyboard}
-              onBackspace={backspaceFromKeyboard}
-              onClose={() => setShowVirtualKeyboard(false)}
-            />
-          ) : null}
         </div>
       )}
 
@@ -668,6 +684,32 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
           </div>
         </div>
       ) : null}
+
+      {portalReady &&
+        showVirtualKeyboard &&
+        !isOverlay &&
+        createPortal(
+          <>
+            {/* Прозрачный слой только для закрытия по тапу вне клавиатуры — без сильного затемнения страницы */}
+            <button
+              type="button"
+              className="fixed inset-0 z-[90] cursor-default bg-transparent"
+              aria-label="Закрыть клавиатуру"
+              onClick={() => setShowVirtualKeyboard(false)}
+            />
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+              <div className="pointer-events-auto w-full max-w-2xl shadow-[0_-12px_40px_rgba(0,0,0,0.55)]">
+                <VirtualKeyboard
+                  compact
+                  onInsert={insertFromKeyboard}
+                  onBackspace={backspaceFromKeyboard}
+                  onClose={() => setShowVirtualKeyboard(false)}
+                />
+              </div>
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

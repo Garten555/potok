@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPusherClient } from "@/lib/pusher/client";
 import { triggerPusherEvent } from "@/lib/pusher/trigger";
+import { copyTextToClipboard } from "@/lib/copy-to-clipboard";
 
 type Visibility = "public" | "unlisted" | "private";
 type PlaylistKind = "user" | "channel";
@@ -37,8 +38,26 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   const [newPlaylistKind, setNewPlaylistKind] = useState<PlaylistKind>("user");
   const [newPlaylistVisibility, setNewPlaylistVisibility] = useState<Visibility>("private");
   const [actionInfo, setActionInfo] = useState("");
+  const [playlistMembershipCount, setPlaylistMembershipCount] = useState<number | null>(null);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const pusher = useMemo(() => createPusherClient(), []);
+
+  const loadPlaylistMembershipCount = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      setPlaylistMembershipCount(null);
+      return;
+    }
+    const { data: mine } = await supabase.from("playlists").select("id").eq("user_id", userData.user.id);
+    const mineIds = new Set((mine ?? []).map((r) => r.id as string));
+    if (mineIds.size === 0) {
+      setPlaylistMembershipCount(0);
+      return;
+    }
+    const { data: links } = await supabase.from("playlist_videos").select("playlist_id").eq("video_id", videoId);
+    const n = (links ?? []).filter((row) => mineIds.has((row as { playlist_id: string }).playlist_id)).length;
+    setPlaylistMembershipCount(n);
+  }, [supabase, videoId]);
 
   const loadReactionData = useCallback(async () => {
     const { data: likeRows } = await supabase.from("likes").select("type").eq("video_id", videoId);
@@ -75,6 +94,10 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   useEffect(() => {
     void loadReactionData();
   }, [loadReactionData]);
+
+  useEffect(() => {
+    void loadPlaylistMembershipCount();
+  }, [loadPlaylistMembershipCount]);
 
   useEffect(() => {
     setNewPlaylistKind(isVideoOwner ? "channel" : "user");
@@ -134,12 +157,9 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   }, [pusher, videoId, loadReactionData]);
 
   const onShare = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setActionInfo("Ссылка скопирована.");
-    } catch {
-      setActionInfo("Не удалось скопировать ссылку.");
-    }
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const ok = await copyTextToClipboard(url);
+    setActionInfo(ok ? "Ссылка скопирована." : "Не удалось скопировать. Выделите адрес вручную в адресной строке.");
   };
 
   const openPlaylists = async () => {
@@ -219,6 +239,7 @@ export function WatchActions({ videoId }: WatchActionsProps) {
       }
       setActionInfo("Плейлисты обновлены.");
       setIsPlaylistOpen(false);
+      void loadPlaylistMembershipCount();
     } finally {
       setIsSavingToPlaylists(false);
     }
@@ -268,7 +289,10 @@ export function WatchActions({ videoId }: WatchActionsProps) {
             onClick={openPlaylists}
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10"
           >
-            <BookmarkPlus className="h-4 w-4" /> Сохранить
+            <BookmarkPlus className="h-4 w-4" />
+            {playlistMembershipCount !== null && playlistMembershipCount > 0
+              ? `В плейлистах (${playlistMembershipCount})`
+              : "Сохранить"}
           </button>
         </div>
       </div>

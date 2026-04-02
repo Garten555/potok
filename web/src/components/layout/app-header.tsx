@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, CirclePlus, Grid2x2, LogIn, LogOut, Menu, Search, Shield, Tv } from "lucide-react";
+import { Bell, CirclePlus, Gavel, Grid2x2, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
@@ -202,14 +202,23 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
 
         {isAuthenticated ? (
           <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5 md:gap-2">
-            {profile?.role === "moderator" || profile?.role === "admin" ? (
+            {profile?.role === "admin" ? (
               <Link
                 href="/admin"
-                className="hidden h-9 w-9 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10 sm:grid"
+                className="hidden h-9 w-9 place-items-center rounded-full border border-amber-400/35 bg-amber-500/10 text-slate-300 transition hover:bg-amber-500/20 sm:grid"
+                aria-label="Админ-панель"
+                title="Админ-панель"
+              >
+                <Shield className="h-4 w-4 text-amber-200" />
+              </Link>
+            ) : profile?.role === "moderator" ? (
+              <Link
+                href="/admin"
+                className="hidden h-9 w-9 place-items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 text-slate-300 transition hover:bg-cyan-500/20 sm:grid"
                 aria-label="Модерация"
                 title="Модерация"
               >
-                <Shield className="h-4 w-4 text-cyan-200" />
+                <Gavel className="h-4 w-4 text-cyan-200" />
               </Link>
             ) : null}
             <Link
@@ -330,6 +339,14 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                   >
                     <CirclePlus className="h-4 w-4 text-cyan-200" />
                     Студия
+                  </Link>
+                  <Link
+                    href="/settings"
+                    className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Settings className="h-4 w-4 text-cyan-200" />
+                    Настройки
                   </Link>
                   <button
                     type="button"

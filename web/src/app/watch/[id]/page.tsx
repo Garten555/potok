@@ -29,7 +29,9 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
 
   const { data: videoWithVisibility, error: videoWithVisibilityError } = await supabase
     .from("videos")
-    .select("id, user_id, title, description, video_url, thumbnail_url, views, visibility, created_at, category_id")
+    .select(
+      "id, user_id, title, description, video_url, thumbnail_url, views, visibility, created_at, category_id, photosensitive_warning",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -38,7 +40,8 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
   if (
     videoWithVisibilityError &&
     videoWithVisibilityError.message.toLowerCase().includes("column") &&
-    videoWithVisibilityError.message.toLowerCase().includes("visibility")
+    (videoWithVisibilityError.message.toLowerCase().includes("visibility") ||
+      videoWithVisibilityError.message.toLowerCase().includes("photosensitive"))
   ) {
     const { data: fallbackVideo } = await supabase
       .from("videos")
@@ -47,7 +50,7 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
       .maybeSingle();
 
     if (fallbackVideo) {
-      video = { ...fallbackVideo, visibility: "public" };
+      video = { ...fallbackVideo, visibility: "public", photosensitive_warning: false };
     }
   }
 
@@ -202,6 +205,10 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
   const showPlaylist =
     Boolean(listId && playlistData && playlistData.items.length > 0);
 
+  const photosensitiveWarning = Boolean(
+    (video as { photosensitive_warning?: boolean }).photosensitive_warning,
+  );
+
   return (
     <div>
       <AppHeader />
@@ -214,6 +221,12 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
           }
         >
           <section className="min-w-0">
+            {photosensitiveWarning ? (
+              <div className="mb-3 rounded-xl border border-amber-400/35 bg-amber-500/15 px-4 py-3 text-sm leading-snug text-amber-50">
+                <span className="font-semibold">Фоточувствительность:</span> в ролике возможны вспышки и быстрая смена
+                изображения. Если вам не рекомендован такой контент — не смотрите видео.
+              </div>
+            ) : null}
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
               <WatchPlayer videoUrl={video.video_url} posterUrl={video.thumbnail_url} />
             </div>

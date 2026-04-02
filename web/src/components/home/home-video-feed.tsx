@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { HomeCategoryId } from "@/components/home/categories";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { PlayCircle } from "lucide-react";
-import { formatPublishedAgo } from "@/lib/format-published-ago";
+import { VideoGridCard } from "@/components/video/video-grid-card";
 import { scoreVideoForHome, type RecContext } from "@/lib/recommendations";
 
 /**
@@ -184,41 +182,18 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
               const meta = video.user_id ? authorsMap.get(String(video.user_id)) : undefined;
               const authorName = meta?.channel_name ?? "Канал";
               return (
-                <Link
+                <VideoGridCard
                   key={video.id}
-                  href={`/watch/${video.id}`}
-                  className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
-                >
-                  <div
-                    className="aspect-video w-full bg-[#0b1323] bg-cover bg-center transition group-hover:scale-[1.01]"
-                    style={video.thumbnail_url ? { backgroundImage: `url(${video.thumbnail_url})` } : undefined}
-                  />
-                  <div className="flex gap-3 p-3 pt-2.5">
-                    <ChannelAvatar
-                      channelName={authorName}
-                      avatarUrl={meta?.avatar_url ?? null}
-                      className="!h-9 !w-9 !text-sm shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-slate-50 transition group-hover:text-cyan-100 sm:text-base">
-                        {video.title}
-                      </h3>
-                      <p className="mt-1.5 truncate text-[13px] leading-tight text-slate-400">{authorName}</p>
-                      <p className="mt-0.5 text-[13px] leading-tight text-slate-500">
-                        {(video.views ?? 0).toLocaleString("ru-RU")} просмотров
-                        {video.created_at ? (
-                          <>
-                            {" "}
-                            <span aria-hidden className="text-slate-600">
-                              •
-                            </span>{" "}
-                            {formatPublishedAgo(video.created_at, now)}
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
+                  layout="home"
+                  videoId={video.id}
+                  title={video.title}
+                  thumbnailUrl={video.thumbnail_url}
+                  views={video.views}
+                  createdAt={video.created_at}
+                  channelName={authorName}
+                  avatarUrl={meta?.avatar_url ?? null}
+                  nowMs={now}
+                />
               );
             })}
           </div>

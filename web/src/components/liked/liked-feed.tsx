@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import clsx from "clsx";
-import { Clock, ThumbsUp, Trash2 } from "lucide-react";
+import { Clock, ThumbsUp } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
 import { useAuthState } from "@/components/auth/auth-context";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 
@@ -22,6 +22,7 @@ type VideoRow = {
   user_id: string;
   description: string | null;
   visibility: string;
+  tags?: string[] | null;
 };
 
 type UserRow = {
@@ -39,7 +40,6 @@ export function LikedFeed() {
   const [authors, setAuthors] = useState<Map<string, UserRow>>(new Map());
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const [q, setQ] = useState("");
 
   const load = async () => {
@@ -71,7 +71,7 @@ export function LikedFeed() {
 
       const { data: videosRaw } = await supabase
         .from("videos")
-        .select("id,title,thumbnail_url,views,created_at,user_id,description,visibility")
+        .select("id,title,thumbnail_url,views,created_at,user_id,description,visibility,tags")
         .in("id", videoIds)
         .order("created_at", { ascending: false });
 
@@ -113,26 +113,25 @@ export function LikedFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
-  const clearLikes = async () => {
-    const qUser = await supabase.auth.getUser();
-    const user = qUser.data.user;
-    if (!user) return;
-
-    setIsClearing(true);
-    try {
-      await supabase.from("likes").delete().eq("user_id", user.id).eq("type", "like");
-      setItems([]);
-      setAuthors(new Map());
-    } finally {
-      setIsClearing(false);
-    }
-  };
-
   const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    return items.filter((it) => it.video.title.toLowerCase().includes(qq));
-  }, [items, q]);
+    return fuzzyFilterEntities(
+      items,
+      (it) => it.video.id,
+      (it) => {
+        const author = authors.get(String(it.video.user_id));
+        const tags = ((it.video.tags ?? []) as string[]).join(" ");
+        return [
+          it.video.title,
+          it.video.description ?? "",
+          tags,
+          author?.channel_name ?? "",
+          author?.channel_handle ?? "",
+          author?.channel_handle ? `@${author.channel_handle}` : "",
+        ];
+      },
+      q,
+    );
+  }, [items, q, authors]);
 
   return (
     <div className="pb-8">
@@ -151,35 +150,25 @@ export function LikedFeed() {
         </section>
       ) : (
         <section className="mt-4 space-y-4 px-4 md:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ThumbsUp className="h-4 w-4 text-cyan-200" />
-            </div>
+          {items.length > 0 ? (
+            <p className="text-sm text-slate-400">
+              {q.trim() ? (
+                <>
+                  Показано: <span className="text-slate-200">{filtered.length}</span> из {items.length}
+                </>
+              ) : (
+                <>
+                  В списке: <span className="text-slate-200">{items.length}</span> видео
+                </>
+              )}
+            </p>
+          ) : null}
 
-            <div className="flex items-center gap-2">
-              {items.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={clearLikes}
-                  disabled={isClearing}
-                  className={clsx(
-                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
-                    "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.06]",
-                    isClearing ? "opacity-60 cursor-not-allowed" : null,
-                  )}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {isClearing ? "Очистка..." : "Убрать все"}
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Поиск по понравившимся"
+              placeholder="Поиск: название, описание, канал, теги (с опечатками)"
               className="w-full rounded-xl border border-white/10 bg-[#0b1120] px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
             />
           </div>
@@ -190,7 +179,16 @@ export function LikedFeed() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-slate-300">
-              Понравившихся видео нет.
+              {q.trim() ? (
+                <>
+                  Ничего не найдено по запросу (в том числе с учётом опечаток). Попробуйте короче запрос или сбросьте
+                  поиск.
+                </>
+              ) : (
+                <>
+                  Здесь появятся видео, которые вы отметите лайком. Откройте ролик и нажмите «Нравится» под плеером.
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

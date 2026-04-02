@@ -13,12 +13,13 @@ async function requireStaff() {
   if (role !== "moderator" && role !== "admin") {
     return { error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }) };
   }
-  return { user };
+  return { user, role };
 }
 
 export async function GET(req: Request) {
   const gate = await requireStaff();
   if ("error" in gate && gate.error) return gate.error;
+  const viewerRole = gate.role ?? null;
 
   const url = new URL(req.url);
   const status = url.searchParams.get("status") ?? "";
@@ -50,5 +51,5 @@ export async function GET(req: Request) {
     });
   }
 
-  return NextResponse.json({ reports: list });
+  return NextResponse.json({ reports: list, viewerRole });
 }

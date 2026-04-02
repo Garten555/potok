@@ -2,6 +2,7 @@
 
 import { type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
+import { Search, Trash2 } from "lucide-react";
 
 type Visibility = "public" | "unlisted" | "private";
 
@@ -15,6 +16,8 @@ export type StudioContentItem = {
   views?: number;
   thumbnail_url?: string | null;
   category_id?: string | null;
+  /** Предупреждение о вспышках / эпилепсии на странице просмотра */
+  photosensitive_warning?: boolean;
 };
 
 export type EditVideoFieldErrors = {
@@ -46,6 +49,12 @@ function getCategoryIcon(name: string): string {
 
 export type StudioContentViewProps = {
   contentItems: StudioContentItem[];
+  /** Всего загружено (до поиска/фильтра) */
+  contentTotalCount: number;
+  studioContentQuery: string;
+  setStudioContentQuery: (v: string) => void;
+  studioContentVisibility: "all" | Visibility;
+  setStudioContentVisibility: (v: "all" | Visibility) => void;
   categories: CategoryItem[];
   editingVideoId: string | null;
   editTitle: string;
@@ -58,6 +67,8 @@ export type StudioContentViewProps = {
   setEditCategoryId: (v: string) => void;
   editVisibility: Visibility;
   setEditVisibility: (v: Visibility) => void;
+  editPhotosensitiveWarning: boolean;
+  setEditPhotosensitiveWarning: (v: boolean) => void;
   editSaving: boolean;
   editError: string;
   editFieldErrors: EditVideoFieldErrors;
@@ -65,10 +76,17 @@ export type StudioContentViewProps = {
   onOpenEdit: (item: StudioContentItem) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
+  onDeleteVideo: (videoId: string) => void;
+  deletingVideoId: string | null;
 };
 
 export function StudioContentView({
   contentItems,
+  contentTotalCount,
+  studioContentQuery,
+  setStudioContentQuery,
+  studioContentVisibility,
+  setStudioContentVisibility,
   categories,
   editingVideoId,
   editTitle,
@@ -81,6 +99,8 @@ export function StudioContentView({
   setEditCategoryId,
   editVisibility,
   setEditVisibility,
+  editPhotosensitiveWarning,
+  setEditPhotosensitiveWarning,
   editSaving,
   editError,
   editFieldErrors,
@@ -88,14 +108,59 @@ export function StudioContentView({
   onOpenEdit,
   onCancelEdit,
   onSaveEdit,
+  onDeleteVideo,
+  deletingVideoId,
 }: StudioContentViewProps) {
+  const showFilterEmpty = contentTotalCount > 0 && contentItems.length === 0;
+
   return (
     <section className="mx-auto w-full max-w-[1600px] rounded-2xl border border-white/10 bg-[#10182a] p-3 sm:p-4 md:p-5 lg:p-6">
       <h1 className="text-xl font-semibold tracking-tight text-slate-100 sm:text-2xl md:text-3xl">Ваши видео</h1>
       <p className="mt-2 text-sm text-slate-400 sm:text-base">
         Просмотры, видимость, описание и редактирование после публикации.
       </p>
+
+      {contentTotalCount > 0 ? (
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="block min-w-[200px] flex-1 space-y-1">
+            <span className="text-xs text-slate-400">Поиск</span>
+            <span className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                value={studioContentQuery}
+                onChange={(e) => setStudioContentQuery(e.target.value)}
+                onKeyDownCapture={stopPlayerHotkeys}
+                placeholder="Название, описание, теги…"
+                className="w-full rounded-lg border border-white/10 bg-[#0b1120] py-2.5 pl-9 pr-3 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
+              />
+            </span>
+          </label>
+          <label className="block w-full min-w-[180px] space-y-1 sm:max-w-[220px]">
+            <span className="text-xs text-slate-400">Видимость</span>
+            <select
+              value={studioContentVisibility}
+              onChange={(e) => setStudioContentVisibility(e.target.value as "all" | Visibility)}
+              onKeyDownCapture={stopPlayerHotkeys}
+              className="w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
+            >
+              <option value="all">Все</option>
+              <option value="public">Публичные</option>
+              <option value="unlisted">По ссылке</option>
+              <option value="private">Приватные</option>
+            </select>
+          </label>
+          <p className="text-xs text-slate-500 sm:ml-auto">
+            Показано {contentItems.length} из {contentTotalCount}
+          </p>
+        </div>
+      ) : null}
+
       <div className="mt-5 flex flex-col gap-4 sm:gap-5">
+        {showFilterEmpty ? (
+          <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Ничего не подошло под фильтр — измените поиск или сбросьте видимость.
+          </p>
+        ) : null}
         {contentItems.length > 0 ? (
           contentItems.map((item) => {
             const isEditing = editingVideoId === item.id;
@@ -132,6 +197,11 @@ export function StudioContentView({
                         : item.visibility === "unlisted"
                           ? "По ссылке"
                           : "Публичное"}
+                      {item.photosensitive_warning ? (
+                        <span className="ml-2 rounded border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-100">
+                          Вспышки
+                        </span>
+                      ) : null}
                     </p>
                     {item.description ? (
                       <p className="line-clamp-4 text-base leading-relaxed text-slate-300 sm:line-clamp-5 sm:text-[1.05rem]">
@@ -145,7 +215,7 @@ export function StudioContentView({
                         {(item.tags as string[]).map((t) => `#${t}`).join(" ")}
                       </p>
                     ) : null}
-                    <div className="pt-1 sm:pt-2">
+                    <div className="flex flex-wrap gap-2 pt-1 sm:pt-2">
                       <button
                         type="button"
                         onClick={() => (isEditing ? onCancelEdit() : onOpenEdit(item))}
@@ -153,6 +223,17 @@ export function StudioContentView({
                       >
                         {isEditing ? "Отмена" : "Редактировать"}
                       </button>
+                      {!isEditing ? (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteVideo(item.id)}
+                          disabled={deletingVideoId === item.id}
+                          className="inline-flex items-center gap-2 rounded-lg border border-rose-400/35 bg-rose-500/15 px-4 py-2.5 text-sm font-medium text-rose-100 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
+                        >
+                          <Trash2 className="h-4 w-4 shrink-0" />
+                          {deletingVideoId === item.id ? "Удаление…" : "Удалить видео"}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -228,6 +309,17 @@ export function StudioContentView({
                         <option value="private">Приватное</option>
                       </select>
                     </label>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={editPhotosensitiveWarning}
+                        onChange={(e) => setEditPhotosensitiveWarning(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-[#0b1120] text-cyan-500 focus:ring-cyan-400/40"
+                      />
+                      <span className="text-sm leading-snug text-amber-100/95">
+                        Предупреждение о вспышках / фоточувствительности (эпилепсия)
+                      </span>
+                    </label>
                     <label className="block space-y-1">
                       <span className="text-xs text-slate-400">Новая обложка (необязательно)</span>
                       <input
@@ -251,9 +343,9 @@ export function StudioContentView({
               </div>
             );
           })
-        ) : (
+        ) : contentTotalCount === 0 && !showFilterEmpty ? (
           <p className="text-sm text-slate-400">Пока нет загруженных видео.</p>
-        )}
+        ) : null}
       </div>
     </section>
   );

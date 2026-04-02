@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Trash2, Clock } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
 import { useAuthState } from "@/components/auth/auth-context";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 
@@ -22,6 +23,7 @@ type VideoRow = {
   user_id: string;
   description: string | null;
   visibility: string;
+  tags?: string[] | null;
 };
 
 type UserRow = {
@@ -40,6 +42,7 @@ export function HistoryFeed() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [clearError, setClearError] = useState("");
   const [q, setQ] = useState("");
 
   const load = async () => {
@@ -115,19 +118,39 @@ export function HistoryFeed() {
   }, [isAuthenticated]);
 
   const filteredItems = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    return items.filter((it) => it.video.title.toLowerCase().includes(qq));
-  }, [items, q]);
+    return fuzzyFilterEntities(
+      items,
+      (it) => it.video.id,
+      (it) => {
+        const author = authors.get(String(it.video.user_id));
+        const tags = ((it.video.tags ?? []) as string[]).join(" ");
+        return [
+          it.video.title,
+          it.video.description ?? "",
+          tags,
+          author?.channel_name ?? "",
+          author?.channel_handle ?? "",
+          author?.channel_handle ? `@${author.channel_handle}` : "",
+        ];
+      },
+      q,
+    );
+  }, [items, q, authors]);
 
   const clearHistory = async () => {
     const qUser = await supabase.auth.getUser();
     const user = qUser.data.user;
     if (!user) return;
+    if (!window.confirm("Очистить всю историю просмотров на этом устройстве аккаунта?")) return;
 
     setIsClearing(true);
+    setClearError("");
     try {
-      await supabase.from("watch_history").delete().eq("user_id", user.id);
+      const { error } = await supabase.from("watch_history").delete().eq("user_id", user.id);
+      if (error) {
+        setClearError(error.message || "Не удалось очистить историю.");
+        return;
+      }
       setItems([]);
       setAuthors(new Map());
     } finally {
@@ -152,30 +175,42 @@ export function HistoryFeed() {
         </section>
       ) : (
         <section className="mt-4 space-y-4 px-4 md:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm text-slate-400">Последние просмотренные видео</div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-slate-400">
+              Последние просмотренные видео
+              {q.trim() ? (
+                <>
+                  {" "}
+                  · показано {filteredItems.length} из {items.length}
+                </>
+              ) : null}
+            </div>
             {items.length > 0 ? (
               <button
                 type="button"
-                onClick={clearHistory}
+                onClick={() => void clearHistory()}
                 disabled={isClearing}
                 className={clsx(
                   "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
-                  "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.06]",
-                  isClearing ? "opacity-60 cursor-not-allowed" : null,
+                  "border-rose-400/30 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20",
+                  isClearing ? "cursor-not-allowed opacity-60" : null,
                 )}
               >
                 <Trash2 className="h-4 w-4" />
-                {isClearing ? "Очистка..." : "Очистить"}
+                {isClearing ? "Очистка..." : "Очистить историю"}
               </button>
             ) : null}
           </div>
+
+          {clearError ? (
+            <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{clearError}</p>
+          ) : null}
 
           <div className="flex items-center gap-3">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Поиск по истории"
+              placeholder="Поиск: название, описание, канал, теги (с опечатками)"
               className="w-full rounded-xl border border-white/10 bg-[#0b1120] px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
             />
           </div>
@@ -184,7 +219,13 @@ export function HistoryFeed() {
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-slate-300">Загрузка...</div>
           ) : filteredItems.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-slate-300">
-              История пуста или ничего не найдено.
+              {q.trim() ? (
+                <>
+                  Ничего не найдено (поиск учитывает опечатки). Сократите запрос или сбросьте поле поиска.
+                </>
+              ) : (
+                <>История просмотров пуста.</>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

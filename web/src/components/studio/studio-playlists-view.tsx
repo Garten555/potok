@@ -1,7 +1,9 @@
 "use client";
 
-import { type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import clsx from "clsx";
+import { Search } from "lucide-react";
+import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
 
 type Visibility = "public" | "unlisted" | "private";
 
@@ -103,6 +105,26 @@ export function StudioPlaylistsView({
   playlistActionMessage,
 }: StudioPlaylistsViewProps) {
   const videoSource = playlistKind === "channel" ? ownVideos : allVideos;
+  const [playlistSearchQ, setPlaylistSearchQ] = useState("");
+  const [videoPickSearchQ, setVideoPickSearchQ] = useState("");
+
+  const filteredPlaylists = useMemo(() => {
+    return fuzzyFilterEntities(
+      playlists,
+      (p) => p.id,
+      (p) => [p.title, p.description ?? ""],
+      playlistSearchQ,
+    );
+  }, [playlists, playlistSearchQ]);
+
+  const filteredVideoSource = useMemo(() => {
+    return fuzzyFilterEntities(
+      videoSource,
+      (v) => v.id,
+      (v) => [v.title],
+      videoPickSearchQ,
+    );
+  }, [videoSource, videoPickSearchQ]);
 
   return (
     <section className="mx-auto w-full max-w-[1600px] rounded-2xl border border-white/10 bg-[#10182a] p-3 sm:p-4 md:p-5 lg:p-6">
@@ -199,9 +221,23 @@ export function StudioPlaylistsView({
             Отметьте ролики и добавьте их в уже созданный плейлист — внизу блока выберите плейлист и нажмите кнопку.
           </p>
 
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={videoPickSearchQ}
+              onChange={(e) => setVideoPickSearchQ(e.target.value)}
+              onKeyDownCapture={stopPlayerHotkeys}
+              placeholder="Поиск по списку видео…"
+              className="w-full rounded-lg border border-white/10 bg-[#0b1120] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none focus:border-cyan-400/55"
+            />
+          </div>
+          {videoSource.length > 0 && filteredVideoSource.length === 0 ? (
+            <p className="mt-2 text-xs text-amber-200/90">Ничего не найдено — сбросьте поиск.</p>
+          ) : null}
+
           <div className="mt-4 max-h-[min(520px,55vh)] space-y-2 overflow-y-auto pr-1">
-            {videoSource.length > 0 ? (
-              videoSource.map((video) => {
+            {filteredVideoSource.length > 0 ? (
+              filteredVideoSource.map((video) => {
                 const checked = selectedPlaylistVideoIds.includes(video.id);
                 return (
                   <label
@@ -244,7 +280,9 @@ export function StudioPlaylistsView({
                 );
               })
             ) : (
-              <p className="text-sm text-slate-400">Пока нет видео для выбора.</p>
+              <p className="text-sm text-slate-400">
+                {videoSource.length > 0 ? "Нет совпадений по поиску." : "Пока нет видео для выбора."}
+              </p>
             )}
           </div>
 
@@ -257,7 +295,7 @@ export function StudioPlaylistsView({
                 className="w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
               >
                 <option value="">— Выберите плейлист —</option>
-                {playlists.map((p) => (
+                {filteredPlaylists.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.title} ({p.kind === "channel" ? "канал" : "польз."}) · {p.videos_count ?? 0} вид.
                   </option>
@@ -277,10 +315,29 @@ export function StudioPlaylistsView({
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-slate-100 sm:text-xl">Ваши плейлисты</h2>
-        <div className="mt-4 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-lg font-semibold text-slate-100 sm:text-xl">Ваши плейлисты</h2>
           {playlists.length > 0 ? (
-            playlists.map((playlist) => {
+            <div className="relative w-full max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                value={playlistSearchQ}
+                onChange={(e) => setPlaylistSearchQ(e.target.value)}
+                onKeyDownCapture={stopPlayerHotkeys}
+                placeholder="Поиск по названию и описанию…"
+                className="w-full rounded-lg border border-white/10 bg-[#0b1120] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none focus:border-cyan-400/55"
+              />
+            </div>
+          ) : null}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {playlists.length > 0
+            ? `Показано ${filteredPlaylists.length} из ${playlists.length}`
+            : null}
+        </p>
+        <div className="mt-4 space-y-3">
+          {filteredPlaylists.length > 0 ? (
+            filteredPlaylists.map((playlist) => {
               const expanded = expandedPlaylistId === playlist.id;
               const detail = playlistVideosDetail[playlist.id];
               const loading = loadingPlaylistDetailId === playlist.id;
@@ -359,6 +416,8 @@ export function StudioPlaylistsView({
                 </div>
               );
             })
+          ) : playlists.length > 0 ? (
+            <p className="text-sm text-amber-200/90">Ничего не найдено — измените запрос.</p>
           ) : (
             <p className="text-sm text-slate-400">Пока нет плейлистов — создайте первый в блоке слева.</p>
           )}

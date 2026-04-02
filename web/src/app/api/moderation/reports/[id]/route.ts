@@ -15,7 +15,7 @@ async function requireStaff() {
   if (role !== "moderator" && role !== "admin") {
     return { error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }) };
   }
-  return { user };
+  return { user, role };
 }
 
 /** Обновление статуса жалобы и опционально бан пользователя по результату разбора. */
@@ -23,6 +23,7 @@ export async function PATCH(req: Request, ctx: Params) {
   const gate = await requireStaff();
   if ("error" in gate && gate.error) return gate.error;
   const staff = gate.user!;
+  const staffRole = gate.role as string | undefined;
 
   const { id } = await ctx.params;
   let body: {
@@ -52,6 +53,10 @@ export async function PATCH(req: Request, ctx: Params) {
     resolved_by: status === "resolved" || status === "dismissed" ? staff.id : null,
     resolved_at: status === "resolved" || status === "dismissed" ? new Date().toISOString() : null,
   };
+
+  if (body.ban_user_id && body.banned_until && staffRole !== "admin") {
+    return NextResponse.json({ error: "Бан пользователей доступен только администраторам." }, { status: 403 });
+  }
 
   const { error: upErr } = await svc.from("reports").update(updates).eq("id", id);
   if (upErr) {

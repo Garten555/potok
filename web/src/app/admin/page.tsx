@@ -23,6 +23,7 @@ type ReportRow = {
 export default function AdminPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
@@ -44,8 +45,9 @@ export default function AdminPage() {
         setReports([]);
         return;
       }
-      const j = (await res.json()) as { reports?: ReportRow[] };
+      const j = (await res.json()) as { reports?: ReportRow[]; viewerRole?: string | null };
       setAllowed(true);
+      setViewerRole(j.viewerRole ?? null);
       setReports(j.reports ?? []);
     } catch {
       setAllowed(false);
@@ -143,9 +145,20 @@ export default function AdminPage() {
     <div>
       <AppHeader />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="text-xl font-semibold text-slate-100">Модерация и жалобы</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold text-slate-100">Модерация и жалобы</h1>
+          {viewerRole === "admin" ? (
+            <span className="rounded-full border border-amber-400/35 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-100">
+              Администратор
+            </span>
+          ) : viewerRole === "moderator" ? (
+            <span className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+              Модератор
+            </span>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-slate-400">
-          Поиск по причине и тексту жалобы; действия — разбор, бан (по API), удаление комментария или скрытие видео.
+          Поиск по причине и тексту жалобы; разбор жалоб и скрытие контента. Бан пользователей — только у администраторов.
         </p>
 
         <div className="mt-6 flex flex-wrap items-end gap-3">
@@ -244,13 +257,15 @@ export default function AdminPage() {
                     >
                       Отклонить
                     </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-2 py-1 text-xs text-rose-100"
-                      onClick={() => void banFromReport(r)}
-                    >
-                      Бан по жалобе
-                    </button>
+                    {viewerRole === "admin" ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-2 py-1 text-xs text-rose-100"
+                        onClick={() => void banFromReport(r)}
+                      >
+                        Бан по жалобе
+                      </button>
+                    ) : null}
                     {r.target_type === "comment" ? (
                       <button
                         type="button"

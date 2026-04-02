@@ -2,11 +2,23 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppHeader } from "@/components/layout/app-header";
-import { BrandingEditor } from "@/components/channel/branding-editor";
+import { ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ChannelTabs } from "@/components/channel/channel-tabs";
+import type { SpotlightChannel } from "@/components/channel/channel-spotlight-strip";
 import { SubscribeButton } from "@/components/channel/subscribe-button";
 import { ChannelReportButton } from "@/components/channel/channel-report-button";
+import type { ChannelHomeSectionResolved, ChannelVideoItem } from "@/lib/channel-home-types";
+
+function playAllHrefUploads(videos: ChannelVideoItem[]): string | null {
+  const first = videos[0];
+  return first ? `/watch/${first.id}` : null;
+}
+
+function playAllHrefPlaylist(videos: ChannelVideoItem[], playlistId: string): string | null {
+  const first = videos[0];
+  return first ? `/watch/${first.id}?list=${encodeURIComponent(playlistId)}` : null;
+}
 
 type ChannelPageProps = {
   params: Promise<{ handle: string }>;
@@ -21,7 +33,9 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
 
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at")
+    .select(
+      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all",
+    )
     .ilike("channel_handle", handle)
     .maybeSingle();
 
@@ -51,13 +65,32 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
         .eq("channel_id", user.id)
         .maybeSingle()
     : { data: null };
-  const { data: latestVideos } = await supabase
+  const visibilityList = isOwner ? (["public", "unlisted", "private"] as const) : (["public"] as const);
+
+  const { data: channelVideosRaw } = await supabase
     .from("videos")
     .select("id, title, thumbnail_url, views, created_at")
     .eq("user_id", user.id)
-    .in("visibility", isOwner ? ["public", "unlisted", "private"] : ["public"])
+    .in("visibility", visibilityList as unknown as string[])
     .order("created_at", { ascending: false })
-    .limit(6);
+    .limit(200);
+
+  const channelVideos: ChannelVideoItem[] = (channelVideosRaw ?? []).map((v) => {
+    const row = v as {
+      id: string;
+      title: string;
+      thumbnail_url: string | null;
+      views: number | null;
+      created_at: string;
+    };
+    return {
+      id: row.id,
+      title: row.title,
+      thumbnail_url: row.thumbnail_url,
+      views: row.views ?? 0,
+      created_at: row.created_at,
+    };
+  });
 
   const { data: channelPlaylistRows } = await supabase
     .from("playlists")
@@ -123,7 +156,146 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     });
   }
 
+  const playlistTitleById = new Map(channelPlaylists.map((p) => [p.id, p.title]));
+
+  const { data: layoutRowsRaw, error: layoutErr } = await supabase
+    .from("channel_home_sections")
+    .select("id, position, section_kind, playlist_id, display_title")
+    .eq("user_id", user.id)
+    .order("position", { ascending: true });
+
+  const layoutRows = layoutErr ? [] : (layoutRowsRaw ?? []);
+
+  const playlistIdsForHome = layoutRows
+    .filter((r) => r.section_kind === "playlist" && r.playlist_id)
+    .map((r) => String(r.playlist_id));
+
+  let playlistVideosByPlaylistId = new Map<string, ChannelVideoItem[]>();
+  if (playlistIdsForHome.length > 0) {
+    const { data: pvRows } = await supabase
+      .from("playlist_videos")
+      .select("playlist_id, position, videos(id, title, thumbnail_url, views, created_at, visibility)")
+      .in("playlist_id", playlistIdsForHome);
+
+    const bucket = new Map<string, Array<{ position: number; video: ChannelVideoItem }>>();
+    for (const raw of pvRows ?? []) {
+      const row = raw as {
+        playlist_id: string;
+        position: number;
+        videos:
+          | {
+              id: string;
+              title: string;
+              thumbnail_url: string | null;
+              views: number | null;
+              created_at: string;
+              visibility: string;
+            }
+          | Array<{
+              id: string;
+              title: string;
+              thumbnail_url: string | null;
+              views: number | null;
+              created_at: string;
+              visibility: string;
+            }>
+          | null;
+      };
+      const v = row.videos;
+      const vid = Array.isArray(v) ? v[0] : v;
+      if (!vid) continue;
+      if (!isOwner && vid.visibility !== "public") continue;
+      const item: ChannelVideoItem = {
+        id: vid.id,
+        title: vid.title,
+        thumbnail_url: vid.thumbnail_url,
+        views: vid.views ?? 0,
+        created_at: vid.created_at,
+      };
+      const arr = bucket.get(row.playlist_id) ?? [];
+      arr.push({ position: row.position, video: item });
+      bucket.set(row.playlist_id, arr);
+    }
+    for (const [pid, arr] of bucket) {
+      arr.sort((a, b) => a.position - b.position);
+      playlistVideosByPlaylistId.set(
+        pid,
+        arr.map((x) => x.video),
+      );
+    }
+  }
+
+  let homeSections: ChannelHomeSectionResolved[];
+  if (layoutRows.length === 0) {
+    const vids = channelVideos.slice(0, 48);
+    homeSections = [
+      {
+        id: null,
+        sectionKind: "uploads",
+        displayTitle: "Видео",
+        videos: vids,
+        playAllHref: playAllHrefUploads(vids),
+      },
+    ];
+  } else {
+    homeSections = [];
+    for (const row of layoutRows) {
+      if (row.section_kind === "uploads") {
+        const displayTitle = row.display_title?.trim() || "Видео";
+        const vids = channelVideos.slice(0, 48);
+        homeSections.push({
+          id: row.id,
+          sectionKind: "uploads",
+          displayTitle,
+          videos: vids,
+          playAllHref: playAllHrefUploads(vids),
+        });
+      } else if (row.section_kind === "spotlight") {
+        const displayTitle = row.display_title?.trim() || "Другие каналы";
+        homeSections.push({
+          id: row.id,
+          sectionKind: "spotlight",
+          displayTitle,
+          videos: [],
+          playAllHref: null,
+        });
+      } else if (row.playlist_id) {
+        const displayTitle =
+          row.display_title?.trim() || playlistTitleById.get(String(row.playlist_id)) || "Плейлист";
+        const pid = String(row.playlist_id);
+        const vids = playlistVideosByPlaylistId.get(pid) ?? [];
+        homeSections.push({
+          id: row.id,
+          sectionKind: "playlist",
+          displayTitle,
+          playlistId: pid,
+          videos: vids,
+          playAllHref: playAllHrefPlaylist(vids, pid),
+        });
+      }
+    }
+  }
+
   const joinedDate = new Date(user.created_at).toLocaleDateString("ru-RU");
+
+  const { data: spotlightLinkRows } = await supabase
+    .from("channel_spotlight_links")
+    .select("target_user_id, position")
+    .eq("owner_id", user.id)
+    .order("position", { ascending: true });
+
+  let spotlightChannels: SpotlightChannel[] = [];
+  const slIds = (spotlightLinkRows ?? []).map((r) => (r as { target_user_id: string }).target_user_id);
+  if (slIds.length > 0) {
+    const { data: spUsers } = await supabase
+      .from("users")
+      .select("id, channel_name, channel_handle, avatar_url")
+      .in("id", slIds);
+    const profMap = new Map((spUsers ?? []).map((u) => [u.id as string, u as SpotlightChannel]));
+    spotlightChannels = slIds
+      .map((id) => profMap.get(id))
+      .filter((c): c is SpotlightChannel => Boolean(c?.channel_handle));
+  }
 
   return (
     <div>
@@ -146,17 +318,17 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-[#08101d] via-[#08101d]/50 to-transparent" />
           {isOwner ? (
-            <BrandingEditor
+            <ChannelBrandingControls
               userId={user.id}
-              channelName={user.channel_name}
+              channelName={user.channel_name ?? ""}
               initialAvatarUrl={user.avatar_url}
               initialBannerUrl={user.banner_url}
-              target="banner"
+              entry="single"
             />
           ) : null}
         </section>
-        <section className="mt-4 w-full border-y border-white/10 bg-[#0c1120] px-4 py-6 sm:px-6 sm:py-8">
-          <div className="mx-auto flex max-w-[1280px] flex-col gap-8">
+        <section className="mt-4 w-full border-y border-white/10 bg-[#0c1120] px-4 py-4 sm:px-6 sm:py-6">
+          <div className="mx-auto flex max-w-[1280px] flex-col gap-4">
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div className="flex items-start gap-4 sm:gap-5">
               <div className="relative shrink-0" aria-label="Аватар канала">
@@ -165,18 +337,6 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
                   avatarUrl={user.avatar_url}
                   variant="channel"
                 />
-                {isOwner ? (
-                  <BrandingEditor
-                    userId={user.id}
-                    channelName={user.channel_name}
-                    initialAvatarUrl={user.avatar_url}
-                    initialBannerUrl={user.banner_url}
-                    target="avatar"
-                    icon="camera"
-                    buttonClassName="right-1 bottom-1 top-auto p-1.5 rounded-md"
-                    iconClassName="h-3.5 w-3.5"
-                  />
-                ) : null}
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-semibold text-slate-100 sm:text-3xl">
@@ -188,15 +348,23 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
               {!isOwner && viewer ? <ChannelReportButton channelUserId={user.id} /> : null}
               {isOwner ? (
-                <Link
-                  href="/studio?tab=upload"
-                  className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/30 sm:text-sm"
-                >
-                  Загрузить видео
-                </Link>
+                <>
+                  <Link
+                    href="/studio?tab=channel-home"
+                    className="rounded-lg border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10 sm:text-sm"
+                  >
+                    Внешний вид канала
+                  </Link>
+                  <Link
+                    href="/studio?tab=upload"
+                    className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/30 sm:text-sm"
+                  >
+                    Загрузить видео
+                  </Link>
+                </>
               ) : (
                 <SubscribeButton
                   channelId={user.id}
@@ -214,8 +382,11 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
             channelHandle={user.channel_handle}
             subscribersCount={subscribersCount ?? user.subscribers_count}
             videosCount={videosCount ?? 0}
-            latestVideos={latestVideos ?? []}
+            channelVideos={channelVideos}
             channelPlaylists={channelPlaylists}
+            homeSections={homeSections}
+            showPlayAllOnHome={user.channel_show_play_all !== false}
+            spotlightChannels={spotlightChannels}
           />
           </div>
         </section>

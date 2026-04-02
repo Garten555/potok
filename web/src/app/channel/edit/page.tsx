@@ -31,11 +31,12 @@ async function uploadChannelMedia(
   const safeExt = (extension ?? "jpg").toLowerCase();
   const filePath = `channels/${userId}/${kind}-${Date.now()}.${safeExt}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from("media")
-    .upload(filePath, file, { upsert: true });
+  const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file, {
+    upsert: true,
+    contentType: file.type || undefined,
+  });
   if (uploadError) {
-    throw new Error("Не удалось загрузить файл в Storage.");
+    throw new Error(uploadError.message || "Не удалось загрузить файл в Storage.");
   }
 
   const { data } = supabase.storage.from("media").getPublicUrl(filePath);
@@ -230,8 +231,9 @@ export default function EditChannelPage() {
           : prev,
       );
       router.refresh();
-    } catch {
-      setError("Ошибка загрузки медиа. Проверьте bucket media и права доступа.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg || "Ошибка загрузки медиа.");
     } finally {
       setIsSaving(false);
     }

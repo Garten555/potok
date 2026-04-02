@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import clsx from "clsx";
-import { BarChart3, Clapperboard, Home, ListVideo, UploadCloud, Video, X } from "lucide-react";
+import { BarChart3, Clapperboard, Flag, Home, LayoutGrid, ListVideo, UploadCloud, Video, X } from "lucide-react";
 
 type StudioSidebarProps = {
-  activeNav: "upload" | "content" | "playlists" | "stats";
-  onSelect: (next: "upload" | "content" | "playlists" | "stats") => void;
+  activeNav: "upload" | "content" | "playlists" | "stats" | "channel_home" | "incoming_reports";
+  onSelect: (next: StudioSidebarProps["activeNav"]) => void;
   /** Открыт ли выездной drawer на узких экранах */
   mobileOpen: boolean;
   onMobileClose: () => void;
 };
 
 export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }: StudioSidebarProps) {
-  const handleSelect = (next: "upload" | "content" | "playlists" | "stats") => {
+  const handleSelect = (next: StudioSidebarProps["activeNav"]) => {
     onSelect(next);
     onMobileClose();
   };
@@ -95,6 +95,32 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
         >
           <ListVideo className="h-4 w-4 shrink-0" />
           Плейлисты
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSelect("channel_home")}
+          className={clsx(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition",
+            activeNav === "channel_home"
+              ? "border border-cyan-300/35 bg-cyan-500/20 text-cyan-100"
+              : "text-slate-300 hover:bg-white/8",
+          )}
+        >
+          <LayoutGrid className="h-4 w-4 shrink-0" />
+          Внешний вид канала
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSelect("incoming_reports")}
+          className={clsx(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition",
+            activeNav === "incoming_reports"
+              ? "border border-cyan-300/35 bg-cyan-500/20 text-cyan-100"
+              : "text-slate-300 hover:bg-white/8",
+          )}
+        >
+          <Flag className="h-4 w-4 shrink-0" />
+          Жалобы на контент
         </button>
         <Link
           href="/"
