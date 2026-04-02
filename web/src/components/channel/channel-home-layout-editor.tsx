@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
@@ -354,7 +355,7 @@ export function ChannelHomeLayoutEditor({
             }
             const available = channelPlaylists.find((p) => !usedPlaylistIds.has(p.id));
             if (!available) {
-              setError("Все плейлисты уже в рядах. Создайте новый во вкладке «Плейлисты».");
+              router.push("/studio?tab=playlists");
               return;
             }
             setDraft((prev) => [
@@ -367,26 +368,32 @@ export function ChannelHomeLayoutEditor({
               },
             ]);
           }}
-          disabled={
-            draft.length >= MAX_SECTIONS ||
-            (channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length)
-          }
+          disabled={draft.length >= MAX_SECTIONS}
           title={
-            channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length
-              ? "Все плейлисты уже добавлены — создайте новый"
-              : undefined
+            draft.length >= MAX_SECTIONS
+              ? "Достигнут лимит разделов"
+              : "Добавить ряд или перейти к плейлистам в студии"
           }
           className={clsx(
             "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
-            draft.length >= MAX_SECTIONS ||
-              (channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length)
+            draft.length >= MAX_SECTIONS
               ? "cursor-not-allowed border-white/5 opacity-50"
               : "border-white/15 bg-white/[0.07] text-slate-100 hover:bg-white/12",
           )}
         >
           <Plus className="h-3.5 w-3.5" />
-          {channelPlaylists.length === 0 ? "Создать плейлист" : "Ряд из плейлиста"}
+          {channelPlaylists.length === 0
+            ? "Создать плейлист"
+            : usedPlaylistIds.size >= channelPlaylists.length
+              ? "Открыть плейлисты"
+              : "Ряд из плейлиста"}
         </button>
+        <Link
+          href="/studio?tab=playlists"
+          className="inline-flex items-center rounded-lg border border-cyan-400/35 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/15"
+        >
+          Плейлисты в студии
+        </Link>
         <button
           type="button"
           onClick={addSpotlight}
