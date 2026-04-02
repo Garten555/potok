@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Bell, CirclePlus, Grid2x2, LogIn, LogOut, Menu, Search, Shield, Tv } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useSidebarState } from "@/components/layout/sidebar-context";
@@ -179,7 +179,13 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
 
         <div className="hidden min-w-0 flex-1 justify-center px-0.5 sm:px-2 lg:flex">
           <div className="w-full max-w-2xl min-w-0">
-            <SmartSearch />
+            <Suspense
+              fallback={
+                <div className="flex h-9 w-full items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5" />
+              }
+            >
+              <SmartSearch />
+            </Suspense>
           </div>
         </div>
 

@@ -10,6 +10,14 @@ import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { SearchChannelShelf } from "@/components/search/search-channel-shelf";
 import { SearchVideoCardMenu } from "@/components/search/search-video-card-menu";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  channelHandleBoost,
+  extractTokens,
+  matchStrength,
+  recencyBoost,
+  tokenHitsInText,
+  viewsSoftBoost,
+} from "@/lib/search-relevance";
 
 type SearchResultsProps = {
   query: string;
@@ -39,17 +47,6 @@ type ChannelRow = {
   created_at?: string | null;
 };
 
-function score(q: string, text: string) {
-  const qq = q.trim().toLowerCase();
-  if (!qq) return 0;
-  const t = (text ?? "").toLowerCase();
-  if (!t) return 0;
-  if (t === qq) return 120;
-  if (t.startsWith(qq)) return 70;
-  if (t.includes(qq)) return 35;
-  return 0;
-}
-
 /** Лучший совпадающий канал для «полки» (ник / имя), как на YouTube. */
 function pickFeaturedChannel(q: string, channels: ChannelRow[]): ChannelRow | null {
   const qn = q.trim().toLowerCase().replace(/^@/, "");
@@ -61,8 +58,8 @@ function pickFeaturedChannel(q: string, channels: ChannelRow[]): ChannelRow | nu
   if (n === qn) return ch;
   if (h && h.length >= 2 && (h.startsWith(qn) || (qn.length >= 2 && qn.startsWith(h)))) return ch;
   if (qn.length >= 2 && n.startsWith(qn)) return ch;
-  const nameScore = score(q, ch.channel_name);
-  if (nameScore >= 70 && qn.length >= 3) return ch;
+  const nameScore = matchStrength(q, ch.channel_name);
+  if (nameScore >= 100 && qn.length >= 3) return ch;
   if (h && qn.length >= 3 && (h.includes(qn) || qn.includes(h))) return ch;
   return null;
 }
@@ -112,7 +109,7 @@ export function SearchResults({ query }: SearchResultsProps) {
     const run = async () => {
       setIsLoading(true);
       try {
-        const tokens = q.toLowerCase().split(/[\s]+/g).filter(Boolean).slice(0, 5);
+        const tokens = extractTokens(q);
 
         const { data: authSession } = await supabase.auth.getUser();
         const authUser = authSession.user;
@@ -145,7 +142,7 @@ export function SearchResults({ query }: SearchResultsProps) {
           .select("id,title,thumbnail_url,views,created_at,user_id,description,tags,visibility")
           .in("visibility", ["public", "unlisted"])
           .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
-          .limit(60);
+          .limit(96);
 
         const rawVideos = (videosRaw ?? []) as unknown as VideoRow[];
 
@@ -179,15 +176,27 @@ export function SearchResults({ query }: SearchResultsProps) {
         const scoredVideos = rawVideos.map((v) => {
           const desc = v.description ?? "";
           const tags = v.tags ?? [];
+          const userMeta = usersById.get(String(v.user_id));
+          const chName = userMeta?.channel_name ?? "";
+          const chHandle = userMeta?.channel_handle ?? "";
 
-          const tokenBoost = tokens.reduce((acc, t) => {
-            const inTitle = v.title.toLowerCase().includes(t);
-            const inDesc = desc.toLowerCase().includes(t);
-            return acc + (inTitle ? 10 : 0) + (inDesc ? 4 : 0);
-          }, 0);
+          const titleScore = matchStrength(q, v.title);
+          const descScore = matchStrength(q, desc) * 0.4;
+          const tagScore = tags.reduce((acc, tag) => acc + matchStrength(q, String(tag ?? "")) * 0.52, 0);
+          const hay = `${v.title} ${desc} ${tags.join(" ")}`;
+          const tokenBonus = tokenHitsInText(hay, tokens) * 16;
+          const channelBonus =
+            Math.max(matchStrength(q, chName), channelHandleBoost(q, chHandle) * 0.48) +
+            tokenHitsInText(`${chName} ${chHandle}`, tokens) * 9;
 
-          const tagBoost = tags.reduce((acc, t) => acc + (t?.toLowerCase().includes(q.toLowerCase()) ? 9 : 0), 0);
-          const base = score(q, v.title) + tokenBoost + tagBoost;
+          const base =
+            titleScore * 1.12 +
+            descScore +
+            tagScore +
+            tokenBonus +
+            channelBonus +
+            recencyBoost(v.created_at) +
+            viewsSoftBoost(v.views);
 
           const personalized = (likedIds.has(v.id) ? 90 : 0) + (watchedIds.has(v.id) ? 45 : 0);
 
@@ -198,7 +207,6 @@ export function SearchResults({ query }: SearchResultsProps) {
           })();
           const viewsNum = typeof v.views === "number" ? v.views : 0;
 
-          const userMeta = usersById.get(String(v.user_id));
           v.channel_name = userMeta?.channel_name ?? null;
           v.channel_handle = userMeta?.channel_handle ?? null;
           v.channel_avatar_url = userMeta?.avatar_url ?? null;
@@ -230,15 +238,12 @@ export function SearchResults({ query }: SearchResultsProps) {
         const rawChannels = (channelsRaw ?? []) as unknown as ChannelRow[];
 
         const scoredChannels = rawChannels.map((ch) => {
-          const qn = q.trim().toLowerCase().replace(/^@/, "");
-          const h = (ch.channel_handle ?? "").toLowerCase();
-          let handleBoost = 0;
-          if (qn && h) {
-            if (h === qn) handleBoost = 500;
-            else if (h.startsWith(qn) || qn.startsWith(h)) handleBoost = 220;
-            else if (h.includes(qn) || qn.includes(h)) handleBoost = 80;
-          }
-          const relevanceScore = score(q, ch.channel_name) + handleBoost;
+          const nameScore = matchStrength(q, ch.channel_name);
+          const handleScore = channelHandleBoost(q, ch.channel_handle);
+          const subs = typeof ch.subscribers_count === "number" ? ch.subscribers_count : 0;
+          const subBoost = Math.min(32, Math.round(Math.log10(subs + 10) * 8));
+          const tokB = tokenHitsInText(`${ch.channel_name} ${ch.channel_handle ?? ""}`, tokens) * 14;
+          const relevanceScore = nameScore * 1.08 + handleScore + subBoost + tokB;
           const createdAtMs = (() => {
             const ms = new Date(ch.created_at ?? "").getTime();
             return Number.isFinite(ms) ? ms : 0;

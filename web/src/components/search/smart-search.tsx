@@ -1,13 +1,22 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
-import { Search, Video, History } from "lucide-react";
+import { Search, Video, History, Sparkles } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { clearSearchHistory, getSearchHistory, pushSearchHistory } from "@/lib/search-history";
+import {
+  channelHandleBoost,
+  extractTokens,
+  matchStrength,
+  normalizeSearch,
+  recencyBoost,
+  tokenHitsInText,
+  viewsSoftBoost,
+} from "@/lib/search-relevance";
 
 type SuggestionVideo = {
   type: "video";
@@ -51,23 +60,40 @@ type UserRowRaw = {
   subscribers_count?: number | null;
 };
 
-function tokenize(q: string) {
-  return q
-    .trim()
-    .toLowerCase()
-    .split(/[\s]+/g)
-    .filter(Boolean)
-    .slice(0, 5);
-}
+function buildPhraseHints(
+  q: string,
+  history: string[],
+  videos: SuggestionVideo[],
+  channels: SuggestionChannel[],
+): string[] {
+  const nq = normalizeSearch(q);
+  if (nq.length < 2) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
 
-function scoreTitle(title: string, q: string) {
-  const t = title.toLowerCase();
-  const qq = q.toLowerCase();
-  if (!qq) return 0;
-  if (t === qq) return 120;
-  if (t.startsWith(qq)) return 70;
-  if (t.includes(qq)) return 35;
-  return 0;
+  const push = (s: string) => {
+    const t = s.trim();
+    if (t.length < 2) return;
+    const k = normalizeSearch(t);
+    if (k === nq) return;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
+
+  for (const h of history) {
+    const nh = normalizeSearch(h);
+    if (nh.startsWith(nq) || nh.includes(nq)) push(h);
+  }
+  for (const v of videos) {
+    const nt = normalizeSearch(v.title);
+    if (nt.startsWith(nq) || nt.includes(nq)) push(v.title);
+  }
+  for (const c of channels) {
+    push(c.channel_name);
+    if (c.channel_handle) push(`@${c.channel_handle}`);
+  }
+  return out.slice(0, 8);
 }
 
 export type SmartSearchProps = {
@@ -81,12 +107,16 @@ export type SmartSearchProps = {
 
 export function SmartSearch({ variant = "compact", onClose, leading }: SmartSearchProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlQuery = searchParams.get("q");
   const { isAuthenticated } = useAuthState();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [phraseHints, setPhraseHints] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [focused, setFocused] = useState(false);
@@ -99,6 +129,12 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const isOverlay = variant === "overlay";
 
   const refreshHistory = () => setSearchHistory(getSearchHistory());
+
+  /** Строка в шапке совпадает с адресом /search?q=… */
+  useEffect(() => {
+    if (pathname !== "/search") return;
+    setQuery(urlQuery ?? "");
+  }, [pathname, urlQuery]);
 
   const handleInputFocus = () => {
     if (blurTimerRef.current) {
@@ -132,6 +168,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     const q = query.trim();
     if (!q || q.length < minChars) {
       setSuggestions([]);
+      setPhraseHints([]);
       setIsLoading(false);
       return;
     }
@@ -139,11 +176,12 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     const fetchId = ++activeFetchId.current;
     setIsOpen(true);
     setSuggestions([]);
+    setPhraseHints([]);
     setIsLoading(true);
 
     const timeout = window.setTimeout(async () => {
       try {
-        const tokens = tokenize(q);
+        const tokens = extractTokens(q);
 
         let likedIds = new Set<string>();
         let watchedIds = new Set<string>();
@@ -215,25 +253,38 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
           const title = String(v.title ?? "");
           const description = String(v.description ?? "");
           const tags = Array.isArray(v.tags) ? (v.tags as string[]) : [];
-
-          const tokenScore =
-            tokens.reduce((acc, t) => acc + (title.toLowerCase().includes(t) ? 10 : 0) + (description.toLowerCase().includes(t) ? 4 : 0), 0) ||
-            0;
-
-          const tagScore = tags.reduce((acc, tag) => acc + (tag?.toLowerCase().includes(q.toLowerCase()) ? 9 : 0), 0);
-          const baseScore = scoreTitle(title, q) + tokenScore + tagScore;
-
           const channel = usersMap.get(String(v.user_id));
+          const chName = channel?.channel_name ?? "";
+          const chHandle = channel?.channel_handle ?? "";
+
+          const titleScore = matchStrength(q, title);
+          const descScore = matchStrength(q, description) * 0.42;
+          const tagScore = tags.reduce((acc, tag) => acc + matchStrength(q, String(tag ?? "")) * 0.55, 0);
+          const hay = `${title} ${description} ${tags.join(" ")}`;
+          const tokenBonus = tokenHitsInText(hay, tokens) * 15;
+          const channelBonus =
+            Math.max(matchStrength(q, chName), channelHandleBoost(q, chHandle) * 0.45) + tokenHitsInText(`${chName} ${chHandle}`, tokens) * 8;
+
+          const baseScore =
+            titleScore * 1.15 +
+            descScore +
+            tagScore +
+            tokenBonus +
+            channelBonus +
+            recencyBoost(v.created_at) +
+            viewsSoftBoost(v.views as number) +
+            likeBoost(String(v.id)) +
+            watchBoost(String(v.id));
 
           return {
-            type: "video",
+            type: "video" as const,
             id,
             title,
             thumbnail_url: (v.thumbnail_url as string) ?? null,
             views: (v.views as number) ?? null,
             channel_name: channel?.channel_name ?? null,
             channel_handle: channel?.channel_handle ?? null,
-            matchScore: baseScore + likeBoost(String(v.id)) + watchBoost(String(v.id)),
+            matchScore: baseScore,
           };
         });
 
@@ -245,26 +296,38 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
           .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
           .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
           .order("subscribers_count", { ascending: false })
-          .limit(6);
+          .limit(8);
 
         const channels = (channelsRaw ?? []) as UserRowRaw[];
-        const scoredChannels: SuggestionChannel[] = channels.map((ch) => ({
-          type: "channel",
-          id: String(ch.id),
-          channel_name: String(ch.channel_name ?? ""),
-          channel_handle: (ch.channel_handle as string) ?? null,
-          avatar_url: (ch.avatar_url as string) ?? null,
-          matchScore: scoreTitle(String(ch.channel_name ?? ""), q),
-        }));
+        const scoredChannels: SuggestionChannel[] = channels.map((ch) => {
+          const name = String(ch.channel_name ?? "");
+          const handle = (ch.channel_handle as string) ?? null;
+          const subs = typeof ch.subscribers_count === "number" ? ch.subscribers_count : 0;
+          const nameScore = matchStrength(q, name);
+          const handleScore = channelHandleBoost(q, handle);
+          const subBoost = Math.min(28, Math.round(Math.log10(subs + 10) * 8));
+          const tokenB = tokenHitsInText(`${name} ${handle ?? ""}`, tokens) * 12;
+          return {
+            type: "channel" as const,
+            id: String(ch.id),
+            channel_name: name,
+            channel_handle: handle,
+            avatar_url: (ch.avatar_url as string) ?? null,
+            matchScore: nameScore * 1.1 + handleScore + tokenB + subBoost,
+          };
+        });
 
         scoredChannels.sort((a, b) => b.matchScore - a.matchScore);
 
         if (fetchId !== activeFetchId.current) return;
-        setSuggestions([...topVideos, ...scoredChannels].slice(0, 10));
+        const merged = [...topVideos, ...scoredChannels].slice(0, 10);
+        setSuggestions(merged);
+        setPhraseHints(buildPhraseHints(q, getSearchHistory(), topVideos, scoredChannels));
         setIsOpen(true);
       } catch {
         if (fetchId !== activeFetchId.current) return;
         setSuggestions([]);
+        setPhraseHints([]);
         setIsOpen(true);
       } finally {
         if (fetchId !== activeFetchId.current) return;
@@ -369,6 +432,29 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     </button>
   );
 
+  const hintsStrip = (compact: boolean) =>
+    phraseHints.length > 0 && trimmed.length >= minChars ? (
+      <div className={clsx("mb-2 space-y-1.5", compact && "px-0.5")}>
+        <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+          <Sparkles className="h-3 w-3 shrink-0 text-cyan-300/70" />
+          Подсказки
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {phraseHints.map((hint) => (
+            <button
+              key={hint}
+              type="button"
+              className="max-w-full truncate rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2.5 py-1 text-left text-xs text-cyan-100/95 transition hover:bg-cyan-500/20"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => submit(hint)}
+            >
+              {hint}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   const suggestionsList = (compact: boolean) => (
     <div className="space-y-1">
       {suggestions.map((s) => {
@@ -401,6 +487,27 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     </div>
   );
 
+  const overlayTypedBlock =
+    trimmed.length >= minChars && !isLoading ? (
+      <div className="px-1">
+        {hintsStrip(false)}
+        {suggestions.length === 0 ? (
+          <button
+            type="button"
+            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              submit(query);
+            }}
+          >
+            Нет подсказок. Искать: <span className="text-cyan-200">{trimmed}</span>
+          </button>
+        ) : (
+          suggestionsList(false)
+        )}
+      </div>
+    ) : null;
+
   const resultsBody = isLoading && trimmed.length >= minChars ? (
     <div className="px-3 py-6 text-center text-sm text-slate-400">Ищем...</div>
   ) : showHistoryPanel ? (
@@ -413,19 +520,8 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     <p className="px-3 py-6 text-center text-sm text-slate-500">
       Недавние запросы появятся после поиска. Начните вводить — покажем видео и каналы.
     </p>
-  ) : trimmed.length >= minChars && !isLoading && suggestions.length === 0 ? (
-    <button
-      type="button"
-      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]"
-      onMouseDown={(e) => {
-        e.preventDefault();
-        submit(query);
-      }}
-    >
-      Нет подсказок. Искать: <span className="text-cyan-200">{trimmed}</span>
-    </button>
-  ) : suggestions.length > 0 ? (
-    suggestionsList(false)
+  ) : trimmed.length >= minChars ? (
+    overlayTypedBlock
   ) : (
     <p className="px-3 py-6 text-center text-sm text-slate-500">Начните вводить запрос — покажем видео и каналы.</p>
   );
@@ -449,21 +545,27 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
         </div>
       );
     }
-    if (trimmed.length >= minChars && !isLoading && suggestions.length === 0) {
+    if (trimmed.length >= minChars && !isLoading) {
       return (
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-xs text-slate-200 transition hover:bg-white/[0.06]"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            submit(query);
-          }}
-        >
-          Нет результатов. Искать: <span className="text-cyan-200">{trimmed}</span>
-        </button>
+        <div className="space-y-1 p-1">
+          {hintsStrip(true)}
+          {suggestions.length === 0 ? (
+            <button
+              type="button"
+              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-xs text-slate-200 transition hover:bg-white/[0.06]"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                submit(query);
+              }}
+            >
+              Нет результатов. Искать: <span className="text-cyan-200">{trimmed}</span>
+            </button>
+          ) : (
+            suggestionsList(true)
+          )}
+        </div>
       );
     }
-    if (suggestions.length > 0) return <div className="space-y-1 p-1">{suggestionsList(true)}</div>;
     return null;
   };
 

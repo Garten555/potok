@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import { SmartSearch } from "@/components/search/smart-search";
@@ -57,7 +57,9 @@ export function MobileSearchOverlay({ open, onClose }: MobileSearchOverlayProps)
       aria-label="Поиск"
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3 pt-2">
-        <SmartSearch variant="overlay" onClose={onClose} leading={backButton} />
+        <Suspense fallback={<div className="min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.04]" />}>
+          <SmartSearch variant="overlay" onClose={onClose} leading={backButton} />
+        </Suspense>
       </div>
     </div>,
     document.body,
