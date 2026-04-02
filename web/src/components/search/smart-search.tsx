@@ -77,7 +77,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     setVoiceListening(false);
   };
 
-  const toggleVoice = () => {
+  const toggleVoice = async () => {
     if (voiceListening) {
       stopVoice();
       return;
@@ -87,6 +87,36 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       setVoiceHint("Голосовой ввод недоступен в этом браузере (нужен Chrome / Edge).");
       return;
     }
+
+    /**
+     * Web Speech API сама по себе часто не показывает запрос доступа к микрофону.
+     * Явный getUserMedia вызывает системный диалог; поток сразу останавливаем — слушает recognition.
+     */
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (e) {
+        const name = e instanceof Error ? e.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          setVoiceHint(
+            "Микрофон заблокирован для этого сайта. Нажмите на значок слева от адреса → «Разрешения» → включите микрофон.",
+          );
+          return;
+        }
+        if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+          setVoiceHint("Микрофон не найден. Проверьте подключение или выбор устройства по умолчанию в системе.");
+          return;
+        }
+        if (name === "NotReadableError" || name === "TrackStartError") {
+          setVoiceHint("Микрофон занят другим приложением. Закройте его и попробуйте снова.");
+          return;
+        }
+        setVoiceHint("Не удалось получить доступ к микрофону.");
+        return;
+      }
+    }
+
     rec.lang = "ru-RU";
     rec.interimResults = true;
     rec.maxAlternatives = 1;
@@ -119,7 +149,9 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
         return;
       }
       if (code === "not-allowed") {
-        setVoiceHint("Доступ к микрофону запрещён. Разрешите его в настройках сайта (значок замка в адресной строке).");
+        setVoiceHint(
+          "Распознавание речи заблокировано. Проверьте разрешения микрофона для сайта (значок слева от адреса).",
+        );
         return;
       }
       if (code === "audio-capture") {
