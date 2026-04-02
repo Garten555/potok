@@ -605,10 +605,10 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
         </div>
       ) : (
         <div className="flex w-full min-w-0 flex-col gap-2">
-          <div className="flex w-full items-center gap-1.5">
+          <div className="flex w-full items-center gap-2">
             <div
               className={clsx(
-                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-slate-400",
+                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 text-slate-400",
               )}
             >
               <Search className="h-4 w-4 shrink-0 opacity-70" />

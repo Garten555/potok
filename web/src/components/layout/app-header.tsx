@@ -3,7 +3,8 @@
 import clsx from "clsx";
 import { Bell, CirclePlus, Gavel, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useSidebarState } from "@/components/layout/sidebar-context";
@@ -41,13 +42,70 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [profile, setProfile] = useState<HeaderProfile | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const profileMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const notificationsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
+  const [profileMenuPos, setProfileMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [notificationsPos, setNotificationsPos] = useState<{ top: number; left: number } | null>(null);
+  const [menusMounted, setMenusMounted] = useState(false);
   const avatarFallback = useMemo(() => {
     const source = profile?.channel_name?.trim();
     if (!source) return "Ю";
     return source.slice(0, 1).toUpperCase();
   }, [profile?.channel_name]);
+
+  useEffect(() => {
+    setMenusMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isMenuOpen || !profileMenuTriggerRef.current) {
+      setProfileMenuPos(null);
+      return;
+    }
+    const MENU_W = 256;
+    const GAP = 8;
+    const pad = 8;
+    const update = () => {
+      const el = profileMenuTriggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const left = Math.max(pad, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - pad));
+      setProfileMenuPos({ top: r.bottom + GAP, left });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [isMenuOpen]);
+
+  useLayoutEffect(() => {
+    if (!isNotificationsOpen || !notificationsTriggerRef.current) {
+      setNotificationsPos(null);
+      return;
+    }
+    const PANEL_W = 320;
+    const GAP = 8;
+    const pad = 8;
+    const update = () => {
+      const el = notificationsTriggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const left = Math.max(pad, Math.min(r.right - PANEL_W, window.innerWidth - PANEL_W - pad));
+      setNotificationsPos({ top: r.bottom + GAP, left });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [isNotificationsOpen]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -105,9 +163,10 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   useEffect(() => {
     if (!isMenuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
+      const t = event.target as Node;
+      if (profileMenuTriggerRef.current?.contains(t)) return;
+      if (profileMenuPanelRef.current?.contains(t)) return;
+      setIsMenuOpen(false);
     };
     window.addEventListener("mousedown", onPointerDown);
     return () => window.removeEventListener("mousedown", onPointerDown);
@@ -116,9 +175,10 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   useEffect(() => {
     if (!isNotificationsOpen) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!notificationsRef.current?.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
+      const t = event.target as Node;
+      if (notificationsTriggerRef.current?.contains(t)) return;
+      if (notificationsPanelRef.current?.contains(t)) return;
+      setIsNotificationsOpen(false);
     };
     window.addEventListener("mousedown", onPointerDown);
     return () => window.removeEventListener("mousedown", onPointerDown);
@@ -160,7 +220,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         embedded ? "relative z-10" : "sticky top-0 z-20",
       )}
     >
-      <div className="flex h-12 min-h-12 w-full min-w-0 max-w-full items-center gap-1 px-2 sm:gap-2 sm:px-3 md:gap-3 md:px-4 lg:gap-4 lg:px-6">
+      <div className="flex min-h-[3.25rem] w-full min-w-0 max-w-full items-center gap-2 px-2 py-1.5 sm:gap-2 sm:px-3 md:gap-3 md:px-4 lg:gap-4 lg:px-6">
         <button
           type="button"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/12 bg-white/5 text-slate-200 transition hover:bg-white/10 sm:h-10 sm:w-10 lg:hidden"
@@ -170,7 +230,11 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <Link href="/" className="flex shrink-0 items-center outline-none ring-cyan-500/40 focus-visible:ring-2" aria-label="На главную">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center self-center outline-none ring-cyan-500/40 focus-visible:ring-2"
+          aria-label="На главную"
+        >
           <div
             className="h-8 w-[4.25rem] bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat sm:h-9 sm:w-28 md:h-10 md:w-32 lg:h-11 lg:w-36"
             aria-hidden
@@ -181,7 +245,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
           <div className="w-full max-w-2xl min-w-0">
             <Suspense
               fallback={
-                <div className="flex h-9 w-full items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5" />
+                <div className="flex h-9 w-full items-center rounded-full border border-white/10 bg-white/[0.04] px-3" />
               }
             >
               <SmartSearch />
@@ -201,7 +265,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         </button>
 
         {isAuthenticated ? (
-          <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1.5 md:gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-2">
             {profile?.role === "admin" ? (
               <Link
                 href="/admin"
@@ -229,19 +293,61 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
             >
               <CirclePlus className="h-4 w-4" />
             </Link>
-            <div className="relative" ref={notificationsRef}>
-              <button
-                type="button"
-                className="grid h-9 w-9 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10"
-                aria-label="Уведомления"
-                aria-expanded={isNotificationsOpen}
-                aria-haspopup="menu"
-                onClick={() => setIsNotificationsOpen((prev) => !prev)}
-              >
-                <Bell className="h-4 w-4" />
-              </button>
-              {isNotificationsOpen ? (
-                <div className="absolute right-0 z-50 mt-2 w-80 max-w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-white/10 bg-[#0f1628]/95 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-md">
+            <button
+              ref={notificationsTriggerRef}
+              type="button"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10"
+              aria-label="Уведомления"
+              aria-expanded={isNotificationsOpen}
+              aria-haspopup="menu"
+              onClick={() => {
+                setIsMenuOpen(false);
+                setIsNotificationsOpen((prev) => !prev);
+              }}
+            >
+              <Bell className="h-4 w-4" />
+            </button>
+            <button
+              ref={profileMenuTriggerRef}
+              type="button"
+              onClick={() => {
+                setIsNotificationsOpen(false);
+                setIsMenuOpen((prev) => !prev);
+              }}
+              className="flex max-w-[min(100%,14rem)] shrink-0 items-center gap-2 rounded-xl border border-cyan-300/20 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 px-2 py-1.5 text-white shadow-[0_4px_18px_rgba(47,126,255,0.28)] ring-1 ring-white/5 transition hover:from-cyan-500/30 hover:to-blue-500/30"
+              aria-label="Открыть меню профиля"
+              aria-expanded={isMenuOpen}
+              aria-haspopup="menu"
+            >
+                <span
+                  className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg border border-white/20 bg-[radial-gradient(circle_at_30%_30%,#82deff_12%,#2d9eff_48%,#0f56be_74%,#0a1d66_100%)] text-xs font-semibold"
+                  style={
+                    profile?.avatar_url
+                      ? {
+                          backgroundImage: `url(${profile.avatar_url})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                >
+                  {profile?.avatar_url ? null : avatarFallback}
+                </span>
+                <span className="hidden max-w-28 truncate text-xs text-cyan-100 sm:inline">
+                  {profile?.channel_name ?? "Профиль"}
+                </span>
+            </button>
+
+            {menusMounted &&
+              isNotificationsOpen &&
+              notificationsPos &&
+              createPortal(
+                <div
+                  ref={notificationsPanelRef}
+                  className="fixed z-[200] w-80 max-w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-white/10 bg-[#0f1628]/98 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-md"
+                  style={{ top: notificationsPos.top, left: notificationsPos.left }}
+                  role="menu"
+                >
                   <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
                     <p className="truncate text-sm font-medium text-slate-100">Уведомления</p>
                   </div>
@@ -278,37 +384,20 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                       })
                     )}
                   </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setIsMenuOpen((prev) => !prev)}
-                className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 px-1.5 py-1 text-white shadow-[0_8px_20px_rgba(47,126,255,0.35)] transition hover:from-cyan-500/30 hover:to-blue-500/30"
-                aria-label="Открыть меню профиля"
-              >
-                <span
-                  className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg border border-white/20 bg-[radial-gradient(circle_at_30%_30%,#82deff_12%,#2d9eff_48%,#0f56be_74%,#0a1d66_100%)] text-xs font-semibold"
-                  style={
-                    profile?.avatar_url
-                      ? {
-                          backgroundImage: `url(${profile.avatar_url})`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }
-                      : undefined
-                  }
-                >
-                  {profile?.avatar_url ? null : avatarFallback}
-                </span>
-                <span className="hidden max-w-28 truncate pr-1 text-xs text-cyan-100 sm:inline">
-                  {profile?.channel_name ?? "Профиль"}
-                </span>
-              </button>
+                </div>,
+                document.body,
+              )}
 
-              {isMenuOpen ? (
-                <div className="absolute right-0 z-50 mt-2 w-64 max-w-[min(16rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-white/10 bg-[#0f1628]/95 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-md">
+            {menusMounted &&
+              isMenuOpen &&
+              profileMenuPos &&
+              createPortal(
+                <div
+                  ref={profileMenuPanelRef}
+                  className="fixed z-[200] w-64 max-w-[min(16rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-white/10 bg-[#0f1628]/98 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-md"
+                  style={{ top: profileMenuPos.top, left: profileMenuPos.left }}
+                  role="menu"
+                >
                   <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
                     <p className="truncate text-sm font-medium text-slate-100">
                       {profile?.channel_name ?? "Мой канал"}
@@ -350,9 +439,9 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                     <LogOut className="h-4 w-4" />
                     {isSigningOut ? "Выходим..." : "Выйти"}
                   </button>
-                </div>
-              ) : null}
-            </div>
+                </div>,
+                document.body,
+              )}
           </div>
         ) : (
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
