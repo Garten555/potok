@@ -88,20 +88,53 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       return;
     }
     rec.lang = "ru-RU";
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    /** Дольше ждём начала речи, чем при continuous=false (реже ложный no-speech). */
+    rec.continuous = true;
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      const text = event.results[0]?.[0]?.transcript?.trim();
+      const chunk = event.results[event.resultIndex];
+      if (!chunk?.isFinal) return;
+      const text = chunk[0]?.transcript?.trim();
       if (text) {
         setQuery((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
         setIsOpen(true);
+        try {
+          rec.stop();
+        } catch {
+          /* ignore */
+        }
       }
     };
-    rec.onerror = () => {
-      setVoiceHint("Не удалось распознать речь. Проверьте микрофон.");
+    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+      const code = event.error ?? "";
       setVoiceListening(false);
       speechRef.current = null;
+
+      if (code === "aborted") {
+        return;
+      }
+      if (code === "no-speech") {
+        setVoiceHint("Речь не поймана. Скажите фразу ещё раз или проверьте громкость микрофона.");
+        return;
+      }
+      if (code === "not-allowed") {
+        setVoiceHint("Доступ к микрофону запрещён. Разрешите его в настройках сайта (значок замка в адресной строке).");
+        return;
+      }
+      if (code === "audio-capture") {
+        setVoiceHint("Микрофон не найден или занят другим приложением.");
+        return;
+      }
+      if (code === "network") {
+        setVoiceHint("Нет связи с сервисом распознавания. Проверьте интернет (в Chrome используется облако Google).");
+        return;
+      }
+      if (code === "service-not-allowed") {
+        setVoiceHint("Распознавание речи недоступно (нужен HTTPS или политика браузера).");
+        return;
+      }
+      setVoiceHint(`Ошибка распознавания (${code || "?"}). Проверьте микрофон и интернет.`);
     };
     rec.onend = () => {
       setVoiceListening(false);
