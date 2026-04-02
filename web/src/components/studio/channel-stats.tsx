@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Eye, Play, UserRound } from "lucide-react";
 
 type SeriesPoint = {
@@ -19,11 +20,16 @@ function LineChart({
   title,
   series,
   stroke = "#2dd4ff",
+  valueUnit,
 }: {
   title: string;
   series: SeriesPoint[];
   stroke?: string;
+  valueUnit: string;
 }) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [pinIdx, setPinIdx] = useState<number | null>(null);
+  const showIdx = pinIdx ?? hoverIdx;
   const w = 300;
   const h = 160;
   const padL = 28;
@@ -72,9 +78,25 @@ function LineChart({
 
           {path ? <path d={path} fill="none" stroke={stroke} strokeWidth={2.5} strokeLinejoin="round" /> : null}
 
-          {points.map((p) => (
-            <g key={p.x}>
-              <circle cx={p.x} cy={p.y} r={3.5} fill={stroke} stroke="rgba(0,0,0,0.4)" strokeWidth={1} />
+          {points.map((p, i) => (
+            <g
+              key={`pt-${i}`}
+              className="cursor-pointer"
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              onClick={() => setPinIdx((prev) => (prev === i ? null : i))}
+            >
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={showIdx === i ? 6 : 3.5}
+                fill={stroke}
+                stroke="rgba(0,0,0,0.4)"
+                strokeWidth={1}
+              />
+              <title>
+                {p.label}: {p.value.toLocaleString("ru-RU")} {valueUnit}
+              </title>
             </g>
           ))}
 
@@ -97,6 +119,22 @@ function LineChart({
             );
           })}
         </svg>
+        <p className="mt-2 min-h-[2.5rem] px-1 text-center text-xs leading-snug">
+          {showIdx !== null ? (
+            <span className="text-cyan-200/95">
+              <span className="font-semibold text-slate-100">{series[showIdx].label}</span>
+              {": "}
+              {series[showIdx].value.toLocaleString("ru-RU")} {valueUnit}
+              {pinIdx !== null ? (
+                <span className="block pt-0.5 text-[11px] font-normal text-slate-500">
+                  Повторный клик снимает выделение
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-slate-500">Наведите на точку или нажмите — покажем значение за месяц</span>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -105,10 +143,15 @@ function LineChart({
 function BarChart({
   title,
   series,
+  valueUnit,
 }: {
   title: string;
   series: SeriesPoint[];
+  valueUnit: string;
 }) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [pinIdx, setPinIdx] = useState<number | null>(null);
+  const showIdx = pinIdx ?? hoverIdx;
   const w = 300;
   const h = 160;
   const padL = 18;
@@ -143,8 +186,26 @@ function BarChart({
           })}
 
           {bars.map((b) => (
-            <g key={b.i}>
-              <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={4} fill="rgba(45,212,255,0.55)" stroke="rgba(45,212,255,0.95)" strokeWidth={1} />
+            <g
+              key={b.i}
+              className="cursor-pointer"
+              onMouseEnter={() => setHoverIdx(b.i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              onClick={() => setPinIdx((prev) => (prev === b.i ? null : b.i))}
+            >
+              <rect
+                x={b.x}
+                y={b.y}
+                width={b.w}
+                height={b.h}
+                rx={4}
+                fill={showIdx === b.i ? "rgba(45,212,255,0.85)" : "rgba(45,212,255,0.55)"}
+                stroke="rgba(45,212,255,0.95)"
+                strokeWidth={showIdx === b.i ? 2 : 1}
+              />
+              <title>
+                {b.label}: {b.value.toLocaleString("ru-RU")} {valueUnit}
+              </title>
             </g>
           ))}
 
@@ -164,6 +225,22 @@ function BarChart({
             );
           })}
         </svg>
+        <p className="mt-2 min-h-[2.5rem] px-1 text-center text-xs leading-snug">
+          {showIdx !== null ? (
+            <span className="text-cyan-200/95">
+              <span className="font-semibold text-slate-100">{series[showIdx].label}</span>
+              {": "}
+              {series[showIdx].value.toLocaleString("ru-RU")} {valueUnit}
+              {pinIdx !== null ? (
+                <span className="block pt-0.5 text-[11px] font-normal text-slate-500">
+                  Повторный клик снимает выделение
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-slate-500">Наведите на столбец или нажмите — значение за месяц</span>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -181,6 +258,10 @@ export function ChannelStats({
   return (
     <section className="mb-4 rounded-2xl border border-white/10 bg-gradient-to-r from-cyan-500/10 via-[#0c1323]/30 to-[#0c1323]/10 p-4 sm:p-5">
       <h2 className="text-sm font-semibold text-slate-100">Статистика канала</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Сводка по вашему каналу. Глобальная модерация — у ролей admin/moderator в{" "}
+        <span className="text-slate-400">/admin</span>.
+      </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0b1120]/60 p-3">
           <div className="grid h-9 w-9 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-500/15">
@@ -215,10 +296,10 @@ export function ChannelStats({
 
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="min-w-0 overflow-x-auto">
-          <LineChart title="Просмотры по месяцам" series={viewsSeries} />
+          <LineChart title="Просмотры по месяцам" series={viewsSeries} valueUnit="просмотров" />
         </div>
         <div className="min-w-0 overflow-x-auto">
-          <BarChart title="Новые подписки по месяцам" series={subsSeries} />
+          <BarChart title="Новые подписки по месяцам" series={subsSeries} valueUnit="новых подписок" />
         </div>
       </div>
     </section>

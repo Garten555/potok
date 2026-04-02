@@ -13,7 +13,7 @@ import {
 import clsx from "clsx";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
@@ -338,6 +338,19 @@ function StudioInner() {
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
 
   const sp = useSearchParams();
+  const router = useRouter();
+
+  const goToStudioTab = useCallback(
+    (
+      nav: "upload" | "content" | "playlists" | "stats" | "channel_home" | "incoming_reports",
+    ) => {
+      const tab =
+        nav === "channel_home" ? "channel-home" : nav === "incoming_reports" ? "incoming-reports" : nav;
+      setActiveNav(nav);
+      router.replace(`/studio?tab=${tab}`, { scroll: false });
+    },
+    [router],
+  );
 
   const debugLog = (...args: unknown[]) => {
     if (process.env.NODE_ENV !== "production") {
@@ -984,7 +997,7 @@ function StudioInner() {
           ].slice(0, 150),
         );
       }
-      setActiveNav("content");
+      goToStudioTab("content");
     } catch {
       setError("Ошибка загрузки файлов в Storage.");
     } finally {
@@ -1387,7 +1400,7 @@ function StudioInner() {
 
         <StudioSidebar
           activeNav={activeNav}
-          onSelect={setActiveNav}
+          onSelect={goToStudioTab}
           mobileOpen={mobileNavOpen}
           onMobileClose={() => setMobileNavOpen(false)}
         />
