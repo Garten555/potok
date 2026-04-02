@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { Heart, SlidersHorizontal, Video, User } from "lucide-react";
+import { SlidersHorizontal, Video, User } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
+import { SearchChannelShelf } from "@/components/search/search-channel-shelf";
+import { SearchVideoCardMenu } from "@/components/search/search-video-card-menu";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type SearchResultsProps = {
@@ -48,6 +50,23 @@ function score(q: string, text: string) {
   return 0;
 }
 
+/** Лучший совпадающий канал для «полки» (ник / имя), как на YouTube. */
+function pickFeaturedChannel(q: string, channels: ChannelRow[]): ChannelRow | null {
+  const qn = q.trim().toLowerCase().replace(/^@/, "");
+  if (!qn || channels.length === 0) return null;
+  const ch = channels[0];
+  const h = (ch.channel_handle ?? "").toLowerCase();
+  const n = ch.channel_name.trim().toLowerCase();
+  if (h && h === qn) return ch;
+  if (n === qn) return ch;
+  if (h && h.length >= 2 && (h.startsWith(qn) || (qn.length >= 2 && qn.startsWith(h)))) return ch;
+  if (qn.length >= 2 && n.startsWith(qn)) return ch;
+  const nameScore = score(q, ch.channel_name);
+  if (nameScore >= 70 && qn.length >= 3) return ch;
+  if (h && qn.length >= 3 && (h.includes(qn) || qn.includes(h))) return ch;
+  return null;
+}
+
 export function SearchResults({ query }: SearchResultsProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { isAuthenticated } = useAuthState();
@@ -73,14 +92,20 @@ export function SearchResults({ query }: SearchResultsProps) {
 
   const [videos, setVideos] = useState<VideoRow[]>([]);
   const [channels, setChannels] = useState<ChannelRow[]>([]);
-  const [likedVideoIds, setLikedVideoIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [featuredChannel, setFeaturedChannel] = useState<ChannelRow | null>(null);
+  const [shelfVideos, setShelfVideos] = useState<VideoRow[]>([]);
+  const [featuredSubscribed, setFeaturedSubscribed] = useState(false);
 
   useEffect(() => {
     const q = query.trim();
     if (!q) {
       setVideos([]);
       setChannels([]);
+      setFeaturedChannel(null);
+      setShelfVideos([]);
+      setViewerId(null);
       return;
     }
 
@@ -89,29 +114,30 @@ export function SearchResults({ query }: SearchResultsProps) {
       try {
         const tokens = q.toLowerCase().split(/[\s]+/g).filter(Boolean).slice(0, 5);
 
+        const { data: authSession } = await supabase.auth.getUser();
+        const authUser = authSession.user;
+        setViewerId(authUser?.id ?? null);
+
         let likedIds = new Set<string>();
         let watchedIds = new Set<string>();
 
-        if (isAuthenticated) {
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData.user) {
+        if (isAuthenticated && authUser) {
             const { data: likedRows } = await supabase
               .from("likes")
               .select("video_id")
-              .eq("user_id", userData.user.id)
+              .eq("user_id", authUser.id)
               .eq("type", "like");
             likedIds = new Set((likedRows ?? []).map((r) => String((r as { video_id: string }).video_id)));
 
             const { data: watchedRows } = await supabase
               .from("watch_history")
               .select("video_id")
-              .eq("user_id", userData.user.id)
+              .eq("user_id", authUser.id)
               .order("watched_at", { ascending: false })
               .limit(40);
             watchedIds = new Set(
               (watchedRows ?? []).map((r) => String((r as { video_id: string }).video_id)),
             );
-          }
         }
 
         const { data: videosRaw } = await supabase
@@ -204,7 +230,15 @@ export function SearchResults({ query }: SearchResultsProps) {
         const rawChannels = (channelsRaw ?? []) as unknown as ChannelRow[];
 
         const scoredChannels = rawChannels.map((ch) => {
-          const relevanceScore = score(q, ch.channel_name);
+          const qn = q.trim().toLowerCase().replace(/^@/, "");
+          const h = (ch.channel_handle ?? "").toLowerCase();
+          let handleBoost = 0;
+          if (qn && h) {
+            if (h === qn) handleBoost = 500;
+            else if (h.startsWith(qn) || qn.startsWith(h)) handleBoost = 220;
+            else if (h.includes(qn) || qn.includes(h)) handleBoost = 80;
+          }
+          const relevanceScore = score(q, ch.channel_name) + handleBoost;
           const createdAtMs = (() => {
             const ms = new Date(ch.created_at ?? "").getTime();
             return Number.isFinite(ms) ? ms : 0;
@@ -228,9 +262,48 @@ export function SearchResults({ query }: SearchResultsProps) {
           .slice(0, 18)
           .map((x) => x.ch);
 
-        setLikedVideoIds(likedIds);
         setVideos(ranked);
         setChannels(sortedChannels);
+
+        const feat = pickFeaturedChannel(q, sortedChannels);
+        setFeaturedChannel(feat);
+
+        let subbed = false;
+        if (feat && authUser) {
+          const { data: subRow } = await supabase
+            .from("subscriptions")
+            .select("channel_id")
+            .eq("subscriber_id", authUser.id)
+            .eq("channel_id", feat.id)
+            .maybeSingle();
+          subbed = !!subRow;
+        }
+        setFeaturedSubscribed(subbed);
+
+        if (feat) {
+          let vq = supabase
+            .from("videos")
+            .select("id,title,thumbnail_url,views,created_at,user_id,description,tags,visibility")
+            .eq("user_id", feat.id)
+            .in("visibility", ["public", "unlisted"]);
+          if (sort === "new") {
+            vq = vq.order("created_at", { ascending: false });
+          } else if (sort === "popular") {
+            vq = vq.order("views", { ascending: false });
+          } else {
+            vq = vq.order("created_at", { ascending: false });
+          }
+          const { data: chVidRaw } = await vq.limit(24);
+          const rows = (chVidRaw ?? []) as VideoRow[];
+          for (const v of rows) {
+            v.channel_name = feat.channel_name;
+            v.channel_handle = feat.channel_handle;
+            v.channel_avatar_url = feat.avatar_url;
+          }
+          setShelfVideos(rows);
+        } else {
+          setShelfVideos([]);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -239,9 +312,24 @@ export function SearchResults({ query }: SearchResultsProps) {
     void run();
   }, [query, isAuthenticated, supabase, sort]);
 
-  const emptyVideos = (kind === "all" || kind === "videos") && videos.length === 0;
-  const emptyChannels = (kind === "all" || kind === "channels") && channels.length === 0;
-  const empty = !isLoading && emptyVideos && emptyChannels;
+  const shelfIds = useMemo(() => new Set(shelfVideos.map((v) => v.id)), [shelfVideos]);
+  const otherVideos = useMemo(
+    () => videos.filter((v) => !shelfIds.has(v.id)),
+    [videos, shelfIds],
+  );
+  const channelsWithoutFeatured = useMemo(
+    () => (featuredChannel ? channels.filter((c) => c.id !== featuredChannel.id) : channels),
+    [channels, featuredChannel],
+  );
+  const shelfTeaser = (shelfVideos[0]?.description ?? "").trim() || null;
+
+  const showChannelShelf = kind === "all" && featuredChannel;
+  const empty =
+    !isLoading &&
+    !featuredChannel &&
+    videos.length === 0 &&
+    shelfVideos.length === 0 &&
+    channels.length === 0;
 
   const goToKind = (nextKind: string) => {
     setIsFilterOpen(false);
@@ -260,13 +348,83 @@ export function SearchResults({ query }: SearchResultsProps) {
   const kindLabel = kind === "videos" ? "Видео" : kind === "channels" ? "Каналы" : "Всё";
   const sortLabel = sort === "new" ? "Новые" : sort === "popular" ? "Популярные" : "Релевантные";
 
+  const filterChip = (active: boolean) =>
+    clsx(
+      "rounded-full border px-4 py-2 text-sm transition",
+      active
+        ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
+        : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
+    );
+
+  const channelsToRender = kind === "all" && featuredChannel ? channelsWithoutFeatured : channels;
+
+  const renderVideoCard = (v: VideoRow) => (
+    <div
+      key={v.id}
+      className="group w-full rounded-xl border border-white/10 bg-white/[0.03] transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
+    >
+      <div className="flex gap-5 p-5">
+        <Link
+          href={`/watch/${v.id}`}
+          className="relative w-80 shrink-0 overflow-hidden rounded-lg bg-[#0b1323]"
+        >
+          <div
+            className="aspect-video w-full bg-cover bg-center transition group-hover:scale-[1.01]"
+            style={v.thumbnail_url ? { backgroundImage: `url(${v.thumbnail_url})` } : undefined}
+          />
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <Link href={`/watch/${v.id}`} className="block">
+            <h4 className="line-clamp-2 text-lg font-semibold leading-snug text-slate-100 transition group-hover:text-cyan-200">
+              {v.title}
+            </h4>
+          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-base text-slate-500">
+            <ChannelAvatar
+              channelName={v.channel_name?.trim() || v.channel_handle || "Канал"}
+              avatarUrl={v.channel_avatar_url}
+              className="!h-9 !w-9 shrink-0"
+            />
+            <span>{(v.views ?? 0).toLocaleString("ru-RU")} просмотров</span>
+            {v.channel_name || v.channel_handle ? (
+              <>
+                <span className="text-slate-600" aria-hidden>
+                  ·
+                </span>
+                {v.channel_handle ? (
+                  <Link
+                    href={`/@${v.channel_handle}`}
+                    className="text-slate-300 transition hover:text-cyan-200"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {v.channel_name?.trim() || `@${v.channel_handle}`}
+                  </Link>
+                ) : (
+                  <span className="text-slate-300">{v.channel_name}</span>
+                )}
+              </>
+            ) : null}
+          </div>
+
+          <p className="mt-3 line-clamp-2 text-base text-slate-400">
+            {v.description && v.description.trim() ? v.description : "Нет описания видео"}
+          </p>
+        </div>
+
+        <SearchVideoCardMenu videoId={v.id} />
+      </div>
+    </div>
+  );
+
   return (
     <div className="pb-8">
       <div
         ref={filterRef}
-        className="sticky top-12 z-10 mt-4 border-b border-white/10 bg-[#0a0d14]/80 backdrop-blur-md"
+        className="sticky z-10 border-b border-white/10 bg-[#0a0d14]/95 backdrop-blur-md"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 3rem)" }}
       >
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6 lg:px-8">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 md:px-6 lg:px-8">
           <button
             type="button"
             onClick={() => setIsFilterOpen((v) => !v)}
@@ -280,7 +438,6 @@ export function SearchResults({ query }: SearchResultsProps) {
             <SlidersHorizontal className="h-4 w-4 text-cyan-200" />
             Фильтры
           </button>
-
           <div className="text-sm text-slate-400">
             {kindLabel} · {sortLabel}
           </div>
@@ -291,80 +448,26 @@ export function SearchResults({ query }: SearchResultsProps) {
             <div className="rounded-xl border border-white/10 bg-[#0f1628]/95 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.35)]">
               <div className="mb-3 text-sm font-semibold text-slate-200">Тип</div>
               <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => goToKind("all")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    kind === "all"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToKind("all")} className={filterChip(kind === "all")}>
                   Всё
                 </button>
-                <button
-                  type="button"
-                  onClick={() => goToKind("videos")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    kind === "videos"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToKind("videos")} className={filterChip(kind === "videos")}>
                   Видео
                 </button>
-                <button
-                  type="button"
-                  onClick={() => goToKind("channels")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    kind === "channels"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToKind("channels")} className={filterChip(kind === "channels")}>
                   Каналы
                 </button>
               </div>
 
               <div className="mt-4 mb-3 text-sm font-semibold text-slate-200">Сортировка</div>
               <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => goToSort("relevance")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    sort === "relevance"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToSort("relevance")} className={filterChip(sort === "relevance")}>
                   Релевантные
                 </button>
-                <button
-                  type="button"
-                  onClick={() => goToSort("new")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    sort === "new"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToSort("new")} className={filterChip(sort === "new")}>
                   Новые
                 </button>
-                <button
-                  type="button"
-                  onClick={() => goToSort("popular")}
-                  className={clsx(
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    sort === "popular"
-                      ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-50"
-                      : "border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06]",
-                  )}
-                >
+                <button type="button" onClick={() => goToSort("popular")} className={filterChip(sort === "popular")}>
                   Популярные
                 </button>
               </div>
@@ -373,7 +476,7 @@ export function SearchResults({ query }: SearchResultsProps) {
         ) : null}
       </div>
 
-      <section className="mt-6 space-y-4 px-4 md:px-6 lg:px-8">
+      <section className="mt-4 space-y-4 px-4 md:px-6 lg:px-8">
         {isLoading ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-base text-slate-300">Загрузка...</div>
         ) : empty ? (
@@ -381,114 +484,79 @@ export function SearchResults({ query }: SearchResultsProps) {
         ) : null}
 
         {kind === "all" || kind === "videos" ? (
-          videos.length > 0 ? (
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <Video className="h-4 w-4 text-cyan-200" />
-              <h3 className="text-base font-semibold text-slate-100">Видео</h3>
-            </div>
-            {/* YouTube-стиль: превью слева, текст справа (без пустых колонок/мест). */}
-            <div className="space-y-4">
-              {videos.map((v) => (
-                <div
-                  key={v.id}
-                  className="group w-full rounded-xl border border-white/10 bg-white/[0.03] transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
-                >
-                  <div className="flex gap-5 p-5">
-                    <Link
-                      href={`/watch/${v.id}`}
-                      className="relative w-80 shrink-0 overflow-hidden rounded-lg bg-[#0b1323]"
-                    >
-                      <div
-                        className="aspect-video w-full bg-cover bg-center transition group-hover:scale-[1.01]"
-                        style={v.thumbnail_url ? { backgroundImage: `url(${v.thumbnail_url})` } : undefined}
-                      />
-                    </Link>
+          showChannelShelf ? (
+            <div className="space-y-6">
+              <SearchChannelShelf
+                channel={{
+                  id: featuredChannel!.id,
+                  channel_name: featuredChannel!.channel_name,
+                  channel_handle: featuredChannel!.channel_handle,
+                  avatar_url: featuredChannel!.avatar_url,
+                  subscribers_count: featuredChannel!.subscribers_count,
+                }}
+                viewerId={viewerId}
+                initiallySubscribed={featuredSubscribed}
+                teaser={shelfTeaser}
+              />
 
-                    <div className="min-w-0 flex-1">
-                      <Link href={`/watch/${v.id}`} className="block">
-                        <h4 className="line-clamp-2 text-lg font-semibold leading-snug text-slate-100 transition group-hover:text-cyan-200">
-                          {v.title}
-                        </h4>
-                      </Link>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-base text-slate-500">
-                        <ChannelAvatar
-                          channelName={v.channel_name?.trim() || v.channel_handle || "Канал"}
-                          avatarUrl={v.channel_avatar_url}
-                          className="!h-9 !w-9 shrink-0"
-                        />
-                        <span>{(v.views ?? 0).toLocaleString("ru-RU")} просмотров</span>
-                        {v.channel_name || v.channel_handle ? (
-                          <>
-                            <span className="text-slate-600" aria-hidden>
-                              ·
-                            </span>
-                            {v.channel_handle ? (
-                              <Link
-                                href={`/@${v.channel_handle}`}
-                                className="text-slate-300 transition hover:text-cyan-200"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {v.channel_name?.trim() || `@${v.channel_handle}`}
-                              </Link>
-                            ) : (
-                              <span className="text-slate-300">{v.channel_name}</span>
-                            )}
-                          </>
-                        ) : null}
-                      </div>
-
-                      <p className="mt-3 line-clamp-2 text-base text-slate-400">
-                        {v.description && v.description.trim()
-                          ? v.description
-                          : "Нет описания видео"}
-                      </p>
-                    </div>
-
-                    {likedVideoIds.has(v.id) ? (
-                      <div className="pt-1 pr-1">
-                        <Heart className="h-4 w-4 shrink-0 text-rose-400" />
-                      </div>
-                    ) : null}
+              {shelfVideos.length > 0 ? (
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Video className="h-4 w-4 text-cyan-200" />
+                    <h3 className="text-base font-semibold text-slate-100">
+                      Новые видео на канале {featuredChannel?.channel_name ?? "канал"}
+                    </h3>
                   </div>
+                  <div className="space-y-4">{shelfVideos.map((v) => renderVideoCard(v))}</div>
                 </div>
-              ))}
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-slate-400">
+                  У этого канала пока нет публичных видео.
+                </p>
+              )}
+
+              {otherVideos.length > 0 ? (
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Video className="h-4 w-4 text-cyan-200" />
+                    <h3 className="text-base font-semibold text-slate-100">Другие результаты</h3>
+                  </div>
+                  <div className="space-y-4">{otherVideos.map((v) => renderVideoCard(v))}</div>
+                </div>
+              ) : null}
             </div>
-          </div>
-        ) : null
+          ) : videos.length > 0 ? (
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <Video className="h-4 w-4 text-cyan-200" />
+                <h3 className="text-base font-semibold text-slate-100">Видео</h3>
+              </div>
+              <div className="space-y-4">{videos.map((v) => renderVideoCard(v))}</div>
+            </div>
+          ) : null
         ) : null}
 
         {kind === "all" || kind === "channels" ? (
-          channels.length > 0 ? (
+          channelsToRender.length > 0 ? (
           <div>
             <div className="mb-3 flex items-center gap-2">
               <User className="h-4 w-4 text-cyan-200" />
               <h3 className="text-base font-semibold text-slate-100">Каналы</h3>
             </div>
               <div className="space-y-2">
-              {channels.map((ch) => {
+              {channelsToRender.map((ch) => {
                 const active = Boolean(ch.channel_handle && ch.channel_handle.length > 0);
-                  const avatarUrl = ch.avatar_url && ch.avatar_url.trim() ? ch.avatar_url : null;
-                  const initial =
-                    ch.channel_name?.trim()?.[0]?.toUpperCase() ?? "К";
                 return (
                   <Link
                     key={ch.id}
                     href={active && ch.channel_handle ? `/@${ch.channel_handle}` : "/"}
                       className={clsx("flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 transition hover:bg-white/[0.06]")}
                   >
-                      {avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={avatarUrl}
-                          alt={ch.channel_name}
-                          className="h-9 w-9 shrink-0 rounded-full border border-white/10 bg-[#0b1323] object-cover"
-                        />
-                      ) : (
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 bg-[#0b1323] text-xs font-semibold text-slate-200">
-                          {initial}
-                        </div>
-                      )}
+                    <ChannelAvatar
+                      channelName={ch.channel_name}
+                      avatarUrl={ch.avatar_url}
+                      className="!h-9 !w-9 shrink-0"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-1 text-sm font-medium text-slate-100">{ch.channel_name}</div>
                       <div className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">

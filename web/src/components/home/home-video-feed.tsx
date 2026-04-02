@@ -193,27 +193,30 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
                     className="aspect-video w-full bg-[#0b1323] bg-cover bg-center transition group-hover:scale-[1.01]"
                     style={video.thumbnail_url ? { backgroundImage: `url(${video.thumbnail_url})` } : undefined}
                   />
-                  <div className="p-3">
-                    <h3 className="line-clamp-2 text-sm font-medium text-slate-100 transition group-hover:text-cyan-200">
-                      {video.title}
-                    </h3>
-                    <div className="mt-1 flex min-w-0 items-center gap-2">
-                      <ChannelAvatar
-                        channelName={authorName}
-                        avatarUrl={meta?.avatar_url ?? null}
-                        className="!h-8 !w-8 !text-xs shrink-0"
-                      />
-                      <p className="truncate text-xs text-slate-400">{authorName}</p>
+                  <div className="flex gap-3 p-3 pt-2.5">
+                    <ChannelAvatar
+                      channelName={authorName}
+                      avatarUrl={meta?.avatar_url ?? null}
+                      className="!h-9 !w-9 !text-sm shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-slate-50 transition group-hover:text-cyan-100 sm:text-base">
+                        {video.title}
+                      </h3>
+                      <p className="mt-1.5 truncate text-[13px] leading-tight text-slate-400">{authorName}</p>
+                      <p className="mt-0.5 text-[13px] leading-tight text-slate-500">
+                        {(video.views ?? 0).toLocaleString("ru-RU")} просмотров
+                        {video.created_at ? (
+                          <>
+                            {" "}
+                            <span aria-hidden className="text-slate-600">
+                              •
+                            </span>{" "}
+                            {formatPublishedAgo(video.created_at, now)}
+                          </>
+                        ) : null}
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {(video.views ?? 0).toLocaleString("ru-RU")} просмотров
-                      {video.created_at ? (
-                        <>
-                          {" · "}
-                          <span className="text-slate-400">{formatPublishedAgo(video.created_at, now)}</span>
-                        </>
-                      ) : null}
-                    </p>
                   </div>
                 </Link>
               );
