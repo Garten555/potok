@@ -19,7 +19,7 @@
 4. Сохраните (Save). Если ошибка «Failed to fetch» — другой браузер / сеть / VPN.
 
 Переменные Supabase (для recovery.html):
-- {{ .Token }} — 6 цифр, ввод на /auth/reset-password
+- {{ .Token }} — 8 цифр (в настройках Supabase), ввод на /auth/forgot-password или /auth/reset-password
 - {{ .Email }} — email пользователя (показ в письме)
 - НЕ использовать {{ .ConfirmationURL }}, если нужен только код
 

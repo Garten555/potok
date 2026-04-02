@@ -1,13 +1,31 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  /** Меньше JS от icon-пакетов при tree-shaking импортов. */
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   allowedDevOrigins: ["192.168.56.1"],
-  /** Явно разрешаем микрофон для этого origin (иначе часть окружений наследует запрет). */
+  /**
+   * Базовая защита: без MIME-sniffing, кликджекинг (frame), утечек referrer;
+   * Permissions-Policy — микрофон только same-origin (запись в студии).
+   */
   async headers() {
+    const securityHeaders = [
+      { key: "X-DNS-Prefetch-Control", value: "on" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      {
+        key: "Permissions-Policy",
+        value: "camera=(), geolocation=(), microphone=(self)",
+      },
+    ];
     return [
       {
         source: "/:path*",
-        headers: [{ key: "Permissions-Policy", value: "microphone=(self)" }],
+        headers: securityHeaders,
       },
     ];
   },

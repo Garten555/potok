@@ -6,30 +6,12 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { z } from "zod";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getPasswordValidationState, strongPasswordPairSchema } from "@/lib/password-validation";
 
-const otpSchema = z
-  .object({
-    email: z.email("Введите корректный email."),
-    code: z.string().min(6, "Введите код из письма."),
-    password: z.string().min(8, "Пароль не короче 8 символов.").max(128),
-    confirmPassword: z.string(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.password !== data.confirmPassword) {
-      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Пароли не совпадают." });
-    }
-  });
-
-const passwordOnlySchema = z
-  .object({
-    password: z.string().min(8, "Пароль не короче 8 символов.").max(128),
-    confirmPassword: z.string(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.password !== data.confirmPassword) {
-      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Пароли не совпадают." });
-    }
-  });
+const emailCodeSchema = z.object({
+  email: z.email("Введите корректный email."),
+  code: z.string().min(8, "Введите полный код из письма (8 цифр)."),
+});
 
 function getErrorRu(msg: string): string {
   const m = msg.toLowerCase();
@@ -45,6 +27,10 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [isPasswordHovered, setIsPasswordHovered] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ password?: string; confirmPassword?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [resendMessage, setResendMessage] = useState("");
@@ -55,6 +41,22 @@ export default function ResetPasswordPage() {
       !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     [],
   );
+
+  const passwordValidation = useMemo(() => getPasswordValidationState(password), [password]);
+  const isConfirmPasswordMismatch =
+    confirmPassword.length > 0 && password !== confirmPassword;
+  const saveBlockReason = useMemo(() => {
+    if (!passwordValidation.isStrong) {
+      return "Пароль слишком слабый. Выполните все требования к паролю.";
+    }
+    if (confirmPassword.length === 0) {
+      return "Повторите пароль для подтверждения.";
+    }
+    if (isConfirmPasswordMismatch) {
+      return "Пароли не совпадают.";
+    }
+    return null;
+  }, [passwordValidation.isStrong, confirmPassword.length, isConfirmPasswordMismatch]);
 
   useEffect(() => {
     if (!hasSupabaseEnv) return;
@@ -88,6 +90,7 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
     setResendMessage("");
     if (!hasSupabaseEnv) {
       setError("Не настроены переменные Supabase в .env.local");
@@ -99,8 +102,15 @@ export default function ResetPasswordPage() {
       const supabase = createSupabaseBrowserClient();
 
       if (fromRecoveryLink) {
-        const parsed = passwordOnlySchema.safeParse({ password, confirmPassword });
+        const parsed = strongPasswordPairSchema.safeParse({ password, confirmPassword });
         if (!parsed.success) {
+          const next: { password?: string; confirmPassword?: string } = {};
+          for (const issue of parsed.error.issues) {
+            const key = issue.path[0];
+            if (key === "password" && !next.password) next.password = issue.message;
+            if (key === "confirmPassword" && !next.confirmPassword) next.confirmPassword = issue.message;
+          }
+          setFieldErrors(next);
           setError(parsed.error.issues[0]?.message ?? "Проверьте поля.");
           return;
         }
@@ -117,20 +127,30 @@ export default function ResetPasswordPage() {
       }
 
       const digits = code.replace(/\D/g, "");
-      const parsed = otpSchema.safeParse({
+      const ecParsed = emailCodeSchema.safeParse({
         email: email.trim(),
         code: digits,
-        password,
-        confirmPassword,
       });
+      if (!ecParsed.success) {
+        setError(ecParsed.error.issues[0]?.message ?? "Проверьте поля.");
+        return;
+      }
 
-      if (!parsed.success) {
-        setError(parsed.error.issues[0]?.message ?? "Проверьте поля.");
+      const pwParsed = strongPasswordPairSchema.safeParse({ password, confirmPassword });
+      if (!pwParsed.success) {
+        const next: { password?: string; confirmPassword?: string } = {};
+        for (const issue of pwParsed.error.issues) {
+          const key = issue.path[0];
+          if (key === "password" && !next.password) next.password = issue.message;
+          if (key === "confirmPassword" && !next.confirmPassword) next.confirmPassword = issue.message;
+        }
+        setFieldErrors(next);
+        setError(pwParsed.error.issues[0]?.message ?? "Проверьте поля.");
         return;
       }
 
       const { error: verifyError } = await supabase.auth.verifyOtp({
-        email: parsed.data.email,
+        email: ecParsed.data.email,
         token: digits,
         type: "recovery",
       });
@@ -140,7 +160,7 @@ export default function ResetPasswordPage() {
       }
 
       const { error: updateError } = await supabase.auth.updateUser({
-        password: parsed.data.password,
+        password: pwParsed.data.password,
       });
       if (updateError) {
         setError(getErrorRu(updateError.message));
@@ -215,34 +235,131 @@ export default function ResetPasswordPage() {
             </p>
           ) : null}
 
-          <label className="relative block space-y-1">
+          <label
+            className="relative block space-y-1"
+            onMouseEnter={() => setIsPasswordHovered(true)}
+            onMouseLeave={() => setIsPasswordHovered(false)}
+          >
             <span className="text-xs text-slate-400">Новый пароль</span>
             <input
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              onFocus={() => setIsPasswordFocused(true)}
+              onBlur={() => setIsPasswordFocused(false)}
               required
-              minLength={8}
-              className="w-full rounded-xl border border-white/10 bg-[#0c1323] px-3 py-2.5 pr-24 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
+              className={clsx(
+                "w-full rounded-xl border bg-[#0c1323] px-3 py-2.5 pr-24 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55",
+                fieldErrors.password ? "border-rose-400/50" : "border-white/10",
+              )}
+              placeholder="******"
             />
             <button
               type="button"
               onClick={() => setShowPassword((p) => !p)}
-              className="absolute right-3 top-[31px] text-xs text-cyan-200/90 hover:text-cyan-100"
+              className="absolute right-3 top-[31px] text-xs text-cyan-200/90 transition hover:text-cyan-100"
             >
               {showPassword ? "Скрыть" : "Показать"}
             </button>
+            {fieldErrors.password ? (
+              <span className="text-xs text-rose-300">{fieldErrors.password}</span>
+            ) : null}
+            {isPasswordFocused || isPasswordHovered ? (
+              <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%+8px)] z-30 rounded-xl border border-white/10 bg-[#131a2c]/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-300">Надежность пароля</span>
+                  <span
+                    className={clsx(
+                      "text-xs font-medium",
+                      passwordValidation.isStrong
+                        ? "text-emerald-300"
+                        : passwordValidation.score >= 4
+                          ? "text-amber-300"
+                          : "text-rose-300",
+                    )}
+                  >
+                    {passwordValidation.isStrong
+                      ? "Сильный"
+                      : passwordValidation.score >= 4
+                        ? "Средний"
+                        : "Слабый"}
+                  </span>
+                </div>
+                <div className="mb-3 h-1.5 w-full rounded-full bg-[#0c1323]">
+                  <div
+                    className={clsx(
+                      "h-full rounded-full transition-all",
+                      passwordValidation.isStrong
+                        ? "bg-emerald-400"
+                        : passwordValidation.score >= 4
+                          ? "bg-amber-400"
+                          : "bg-rose-400",
+                    )}
+                    style={{ width: `${(passwordValidation.score / 6) * 100}%` }}
+                  />
+                </div>
+                {!passwordValidation.noCyrillic && password.length > 0 ? (
+                  <p className="mb-2 text-xs text-rose-300">
+                    Внимание: пароль не должен содержать русские символы.
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                  <span className={clsx(passwordValidation.minLength ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.minLength ? "✓" : "•"} Минимум 8 символов
+                  </span>
+                  <span className={clsx(passwordValidation.hasLowercase ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.hasLowercase ? "✓" : "•"} Строчная латинская буква
+                  </span>
+                  <span className={clsx(passwordValidation.hasUppercase ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.hasUppercase ? "✓" : "•"} Заглавная латинская буква
+                  </span>
+                  <span className={clsx(passwordValidation.hasDigit ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.hasDigit ? "✓" : "•"} Минимум одна цифра
+                  </span>
+                  <span className={clsx(passwordValidation.hasSpecial ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.hasSpecial ? "✓" : "•"} Минимум один спецсимвол
+                  </span>
+                  <span className={clsx(passwordValidation.noCyrillic ? "text-emerald-300" : "text-slate-400")}>
+                    {passwordValidation.noCyrillic ? "✓" : "•"} Без русских символов
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </label>
 
-          <label className="block space-y-1">
+          <label className="relative block space-y-1">
             <span className="text-xs text-slate-400">Повторите пароль</span>
             <input
-              type={showPassword ? "text" : "password"}
+              type={showConfirmPassword ? "text" : "password"}
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+              }}
               required
-              className="w-full rounded-xl border border-white/10 bg-[#0c1323] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
+              className={clsx(
+                "w-full rounded-xl border bg-[#0c1323] px-3 py-2.5 pr-24 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55",
+                fieldErrors.confirmPassword || isConfirmPasswordMismatch
+                  ? "border-rose-400/50"
+                  : "border-white/10",
+              )}
+              placeholder="******"
             />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((p) => !p)}
+              className="absolute right-3 top-[31px] text-xs text-cyan-200/90 transition hover:text-cyan-100"
+            >
+              {showConfirmPassword ? "Скрыть" : "Показать"}
+            </button>
+            {fieldErrors.confirmPassword || isConfirmPasswordMismatch ? (
+              <span className="text-xs text-rose-300">
+                {fieldErrors.confirmPassword ?? "Пароли не совпадают."}
+              </span>
+            ) : null}
           </label>
 
           {error ? (
@@ -258,7 +375,7 @@ export default function ResetPasswordPage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !!saveBlockReason}
             className={clsx(
               "w-full rounded-xl border border-cyan-300/35 bg-cyan-500/20 py-2.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60",
             )}

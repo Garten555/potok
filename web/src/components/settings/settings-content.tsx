@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ExternalLink, KeyRound, Trash2, Video, UserCog, Wrench } from "lucide-react";
 import { clearSearchHistory } from "@/lib/search-history";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { strongPasswordPairSchema } from "@/lib/password-validation";
 import { AccountFreezeSection } from "@/components/settings/account-freeze-section";
 import { MfaSettingsSection } from "@/components/settings/mfa-settings-section";
 
@@ -96,6 +98,7 @@ export function SettingsContent() {
 }
 
 function AccountSecuritySection() {
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [email, setEmail] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -122,16 +125,12 @@ function AccountSecuritySection() {
       setFeedback({ kind: "err", text: "Введите текущий пароль." });
       return;
     }
-    if (password.length < 8) {
-      setFeedback({ kind: "err", text: "Новый пароль не короче 8 символов." });
-      return;
-    }
-    if (password.length > 128) {
-      setFeedback({ kind: "err", text: "Пароль слишком длинный." });
-      return;
-    }
-    if (password !== confirm) {
-      setFeedback({ kind: "err", text: "Новые пароли не совпадают." });
+    const pwParsed = strongPasswordPairSchema.safeParse({ password, confirmPassword: confirm });
+    if (!pwParsed.success) {
+      setFeedback({
+        kind: "err",
+        text: pwParsed.error.issues[0]?.message ?? "Проверьте новый пароль.",
+      });
       return;
     }
     setBusy(true);
@@ -150,16 +149,17 @@ function AccountSecuritySection() {
       });
       return;
     }
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({ password: pwParsed.data.password });
     setBusy(false);
     if (error) {
       setFeedback({ kind: "err", text: error.message || "Не удалось сменить пароль." });
       return;
     }
-    setFeedback({ kind: "ok", text: "Пароль обновлён. Используйте его при следующем входе." });
     setCurrentPassword("");
     setPassword("");
     setConfirm("");
+    router.push("/");
+    router.refresh();
   };
 
   return (

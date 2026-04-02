@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { z } from "zod";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getPasswordValidationState } from "@/lib/password-validation";
 
 type AuthMode = "login" | "register";
 type FieldErrors = {
@@ -13,17 +14,6 @@ type FieldErrors = {
   password?: string;
   confirmPassword?: string;
   channelName?: string;
-};
-
-type PasswordValidationState = {
-  minLength: boolean;
-  hasLowercase: boolean;
-  hasUppercase: boolean;
-  hasDigit: boolean;
-  hasSpecial: boolean;
-  noCyrillic: boolean;
-  score: number;
-  isStrong: boolean;
 };
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
@@ -167,41 +157,6 @@ function getAuthErrorMessageRu(rawMessage: string): string {
   }
 
   return "Произошла ошибка авторизации. Попробуйте снова.";
-}
-
-function getPasswordValidationState(password: string): PasswordValidationState {
-  const minLength = password.length >= 8;
-  const hasLowercase = /[a-z]/.test(password);
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasDigit = /\d/.test(password);
-  const hasSpecial = /[^A-Za-z0-9]/.test(password);
-  const noCyrillic = !/[А-Яа-яЁё]/.test(password);
-
-  const score = [
-    minLength,
-    hasLowercase,
-    hasUppercase,
-    hasDigit,
-    hasSpecial,
-    noCyrillic,
-  ].filter(Boolean).length;
-
-  return {
-    minLength,
-    hasLowercase,
-    hasUppercase,
-    hasDigit,
-    hasSpecial,
-    noCyrillic,
-    score,
-    isStrong:
-      minLength &&
-      hasLowercase &&
-      hasUppercase &&
-      hasDigit &&
-      hasSpecial &&
-      noCyrillic,
-  };
 }
 
 const loginSchema = z.object({
