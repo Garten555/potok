@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ListVideo, MoreVertical, Clock } from "lucide-react";
+import { ListVideo, MoreVertical, Clock, Link2, ExternalLink, Share2, Flag } from "lucide-react";
 import clsx from "clsx";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ReportDialog } from "@/components/report/report-dialog";
 
 type SearchVideoCardMenuProps = {
   videoId: string;
@@ -114,6 +115,45 @@ export function SearchVideoCardMenu({ videoId }: SearchVideoCardMenuProps) {
     }
   };
 
+  const watchHref = `/watch/${videoId}`;
+
+  const fullWatchUrl = () =>
+    typeof window !== "undefined" ? `${window.location.origin}${watchHref}` : watchHref;
+
+  const copyLink = async () => {
+    setMsg(null);
+    try {
+      await navigator.clipboard.writeText(fullWatchUrl());
+      setMsg("Ссылка скопирована.");
+      setOpen(false);
+    } catch {
+      setMsg("Не удалось скопировать.");
+    }
+  };
+
+  const openInNewTab = () => {
+    window.open(watchHref, "_blank", "noopener,noreferrer");
+    setOpen(false);
+  };
+
+  const shareVideo = async () => {
+    setMsg(null);
+    const url = fullWatchUrl();
+    try {
+      if (navigator.share) {
+        await navigator.share({ url, title: "Видео на Potok" });
+        setOpen(false);
+      } else {
+        await navigator.clipboard.writeText(url);
+        setMsg("Ссылка скопирована (нет системного «Поделиться»).");
+        setOpen(false);
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setMsg("Не удалось поделиться.");
+    }
+  };
+
   const addToPlaylist = async (playlistId: string) => {
     setMsg(null);
     const { data: auth } = await supabase.auth.getUser();
@@ -205,6 +245,60 @@ export function SearchVideoCardMenu({ videoId }: SearchVideoCardMenuProps) {
               ))}
             </div>
           )}
+
+          <div className="my-1 border-t border-white/10" />
+
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => void copyLink()}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.08]"
+          >
+            <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
+            Копировать ссылку
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={openInNewTab}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.08]"
+          >
+            <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+            Открыть в новой вкладке
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => void shareVideo()}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.08]"
+          >
+            <Share2 className="h-4 w-4 shrink-0 text-slate-400" />
+            Поделиться
+          </button>
+
+          <ReportDialog
+            targetType="video"
+            targetId={videoId}
+            label="Пожаловаться на видео"
+            renderTrigger={(onOpen) => (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  onOpen();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.08]"
+              >
+                <Flag className="h-4 w-4 shrink-0 text-amber-200/80" />
+                Пожаловаться
+              </button>
+            )}
+          />
         </div>
       ) : null}
 

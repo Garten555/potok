@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Flag } from "lucide-react";
 import clsx from "clsx";
 import { REPORT_REASON_CODES } from "@/lib/report-reasons";
@@ -10,9 +10,17 @@ type ReportDialogProps = {
   targetId: string;
   label?: string;
   className?: string;
+  /** Кастомная кнопка открытия (например пункт меню «⋯»). */
+  renderTrigger?: (onOpen: () => void) => ReactNode;
 };
 
-export function ReportDialog({ targetType, targetId, label = "Пожаловаться", className }: ReportDialogProps) {
+export function ReportDialog({
+  targetType,
+  targetId,
+  label = "Пожаловаться",
+  className,
+  renderTrigger,
+}: ReportDialogProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASON_CODES[0]?.code ?? "other");
   const [details, setDetails] = useState("");
@@ -46,22 +54,28 @@ export function ReportDialog({ targetType, targetId, label = "Пожаловат
     }
   };
 
+  const openModal = () => {
+    setMsg(null);
+    setOpen(true);
+  };
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          setMsg(null);
-          setOpen(true);
-        }}
-        className={clsx(
-          "inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08]",
-          className,
-        )}
-      >
-        <Flag className="h-3.5 w-3.5 opacity-80" />
-        {label}
-      </button>
+      {renderTrigger ? (
+        renderTrigger(openModal)
+      ) : (
+        <button
+          type="button"
+          onClick={openModal}
+          className={clsx(
+            "inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08]",
+            className,
+          )}
+        >
+          <Flag className="h-3.5 w-3.5 opacity-80" />
+          {label}
+        </button>
+      )}
 
       {open ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="dialog">
