@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 110" role="img" aria-labelledby="title desc">
+  <title id="title">POTOK Logo</title>
+  <desc id="desc">Blue gradient play mark with white POTOK text</desc>
+  <defs>
+    <linearGradient id="bgMark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#47c8ff"/>
+      <stop offset="52%" stop-color="#0d86ea"/>
+      <stop offset="100%" stop-color="#073389"/>
+    </linearGradient>
+    <linearGradient id="innerWave" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#9be9ff"/>
+      <stop offset="100%" stop-color="#0b58cf"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark -->
+  <g transform="translate(6,7)">
+    <rect x="0" y="0" width="96" height="96" rx="24" fill="url(#bgMark)"/>
+    <path d="M20 56c9-18 26-31 48-36-9 8-17 17-22 30 9-5 20-8 32-7-9 4-17 10-22 18-7 11-6 21-2 35-18-7-30-17-34-40z" fill="#06206d" opacity=".95"/>
+    <path d="M17 43c9-13 23-23 39-27-6 8-10 15-13 24 8-4 16-5 24-4-7 4-13 8-17 14-6 8-7 17-4 29-14-7-24-16-29-36z" fill="url(#innerWave)" opacity=".95"/>
+    <path d="M64 16c11 2 20 9 25 18-8-4-17-6-27-4 5-4 8-8 10-14 0 0-6 1-8 0z" fill="#8be9ff" opacity=".8"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text
+    x="120"
+    y="70"
+    fill="#ffffff"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="48"
+    font-weight="700"
+    letter-spacing="1.5"
+  >
+    POTOK
+  </text>
+</svg>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Техническое задание — POTOK</title>
+<style>
+
+:root {
+  --ink: #0c1222;
+  --muted: #5c6b7a;
+  --line: #c5d0dc;
+  --surface: #f4f7fb;
+  --accent: #0b6e8c;
+  --accent-bright: #1496b8;
+  --accent-soft: #d9f0f7;
+  --header-deep: #062535;
+}
+
+* { box-sizing: border-box; }
+
+@page {
+  size: A4;
+  margin: 14mm 12mm 16mm 12mm;
+}
+
+html {
+  font-size: 15px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Cambria", "Georgia", "Times New Roman", serif;
+  color: var(--ink);
+  background: linear-gradient(160deg, var(--header-deep) 0%, #152a3d 38%, #e8eef4 38%);
+  min-height: 100vh;
+  padding: 2rem 1rem 2.5rem;
+}
+
+.sheet {
+  max-width: 210mm;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow:
+    0 4px 6px rgba(12, 18, 34, 0.06),
+    0 22px 48px rgba(15, 23, 42, 0.14);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.doc-header {
+  position: relative;
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.07) 0%, transparent 45%),
+    linear-gradient(135deg, #063a52 0%, #0a5f7a 42%, var(--accent-bright) 100%);
+  color: #f0fafc;
+  padding: 2.4rem 2.6rem 2.1rem;
+  border-bottom: 3px solid rgba(255, 255, 255, 0.22);
+}
+
+.doc-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #7dd3fc 0%, #38bdf8 35%, rgba(255, 255, 255, 0.35) 100%);
+  opacity: 0.9;
+}
+
+.doc-header .label {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  opacity: 0.88;
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+
+.doc-header h1.title {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 650;
+  margin: 0 0 0.35rem;
+  line-height: 1.2;
+  border: none;
+  letter-spacing: -0.02em;
+}
+
+.doc-header .meta {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 0.9rem;
+  opacity: 0.94;
+  margin-top: 0.85rem;
+  line-height: 1.55;
+}
+
+.doc-header .meta strong { font-weight: 600; }
+
+.content {
+  padding: 2.1rem 2.4rem 2.6rem;
+}
+
+.content h1 {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 1.38rem;
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  page-break-after: avoid;
+}
+
+.content h2 {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 1.08rem;
+  margin: 1.65rem 0 0.55rem;
+  color: #0a4a5c;
+  font-weight: 650;
+  padding: 0.35rem 0 0.35rem 0.75rem;
+  border-left: 4px solid var(--accent-bright);
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 88%);
+  page-break-after: avoid;
+}
+
+.content h3 {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 0.98rem;
+  margin: 1.15rem 0 0.4rem;
+  color: #334e5c;
+  font-weight: 600;
+  page-break-after: avoid;
+}
+
+.content p {
+  margin: 0.48rem 0;
+  line-height: 1.68;
+  text-align: justify;
+  hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+.content ul {
+  margin: 0.4rem 0 0.7rem;
+  padding-left: 1.2rem;
+}
+
+.content li {
+  margin: 0.26rem 0;
+  line-height: 1.58;
+  padding-left: 0.15rem;
+}
+
+.content li::marker {
+  color: var(--accent);
+}
+
+code.inline {
+  font-family: Consolas, "Courier New", "Lucida Console", monospace;
+  font-size: 0.86em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 0.1em 0.38em;
+  border-radius: 4px;
+  color: #0b1f2a;
+}
+
+pre.code-block {
+  font-family: Consolas, "Courier New", "Lucida Console", monospace;
+  font-size: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-bright);
+  border-radius: 6px;
+  padding: 0.9rem 1.05rem;
+  overflow-x: auto;
+  line-height: 1.48;
+  margin: 0.8rem 0;
+}
+
+.doc-footer {
+  margin-top: 2rem;
+  padding: 1.1rem 2.4rem 1.6rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: linear-gradient(180deg, #fafcfd 0%, #fff 100%);
+  line-height: 1.5;
+}
+
+@media print {
+  body {
+    background: #fff;
+    padding: 0;
+  }
+  .sheet {
+    box-shadow: none;
+    max-width: none;
+    border: none;
+    border-radius: 0;
+  }
+  .content h2 {
+    break-inside: avoid;
+  }
+}
+
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header class="doc-header">
+    <div class="label">Документ проектной документации</div>
+    <h1 class="title">Техническое задание</h1>
+    <div class="meta">
+      <strong>Проект:</strong> POTOK — веб-платформа публикации и просмотра видео<br />
+      <strong>Формат:</strong> PDF
+    </div>
+  </header>
+  <article class="content">
+<h2>1) Цель проекта</h2>
+<p>Собрать функциональный MVP веб-приложения для публикации и просмотра видео с базовой социальной механикой: аккаунты, каналы, подписки, комментарии, уведомления и рекомендации.</p>
+<p>Проект фокусируется на <strong>бизнес-логике и данных</strong>, без детальной визуальной проработки.</p>
+<h2>2) Технологический стек</h2>
+<ul><li><code class="inline">Next.js</code> (App Router, TypeScript)</li><li><code class="inline">Supabase</code>:</li><li>Auth (email/password, опционально OAuth)</li><li>PostgreSQL</li><li>Storage (видео, превью, аватары)</li><li>RLS (Row Level Security)</li><li><code class="inline">Pusher</code> (или совместимый аналог) для real-time</li><li><code class="inline">Plyr</code> как единый видеоплеер (preview + watch page)</li></ul>
+<h2>2.1 Архитектурные принципы (обязательные)</h2>
+<ul><li><strong>В БД хранятся только метаданные и ссылки/пути к медиа</strong> (<code class="inline">video_url</code>, <code class="inline">thumbnail_url</code>, <code class="inline">avatar_url</code>), без бинарных файлов.</li><li><strong>Компонентная вёрстка</strong>: UI собирается из переиспользуемых компонентов (layout, cards, lists, forms, player, comments, notifications).</li><li>Разделение на server/client компоненты и модули по доменам (<code class="inline">video</code>, <code class="inline">auth</code>, <code class="inline">comments</code>, <code class="inline">notifications</code>, <code class="inline">subscriptions</code>).</li></ul>
+<h2>3) Границы MVP</h2>
+<h3>Входит в MVP</h3>
+<ul><li>Регистрация/вход, профиль пользователя, страница канала</li><li>Загрузка видео в Storage и публикация метаданных</li><li>Категории, лента и фильтрация</li><li>Страница просмотра видео <code class="inline">/video/[id]</code></li><li>Подписки и базовые рекомендации</li><li>Комментарии с вложенностью + realtime обновление</li><li>Уведомления (realtime + хранение в БД)</li><li>Пагинация видео и комментариев</li></ul>
+<h3>Не входит в MVP</h3>
+<ul><li>Финальный UI/дизайн-система/брендинг</li><li>Сложные медиа-процессы (транскодинг, ABR, DRM)</li><li>Продвинутая модерация/антиспам/антиабьюз</li><li>Монетизация и рекламные инструменты</li><li><strong>Live/стриминг</strong> (прямые эфиры) — вне текущего объема</li></ul>
+<h2>4) Роли и сценарии</h2>
+<h3>Гость</h3>
+<ul><li>Просматривает публичные видео и категории</li><li>Открывает страницу видео и читает комментарии</li></ul>
+<h3>Авторизованный пользователь</h3>
+<ul><li>Управляет профилем</li><li>Загружает видео</li><li>Подписывается на каналы</li><li>Ставит like/dislike</li><li>Комментирует и отвечает на комментарии</li><li>Получает уведомления</li></ul>
+<h2>5) Функциональные требования</h2>
+<h2>5.1 Аутентификация и пользователи</h2>
+<ul><li>Supabase Auth: email + password (OAuth как опция).</li><li>Профиль пользователя: <code class="inline">username</code>, <code class="inline">avatar_url</code>, производные счетчики.</li><li>Канал пользователя связан с аккаунтом (1:1).</li></ul>
+<p><strong>Бизнес-правила</strong></p>
+<ul><li><code class="inline">username</code> уникален (case-insensitive).</li><li>Нельзя подписаться на самого себя.</li></ul>
+<h2>5.2 Видео</h2>
+<ul><li>Форма загрузки: <code class="inline">title</code>, <code class="inline">description</code>, <code class="inline">category</code>, <code class="inline">tags</code>, <code class="inline">thumbnail</code>, <code class="inline">video</code>.</li><li>Видео и изображения хранятся в Supabase Storage.</li><li>Метаданные сохраняются в таблице <code class="inline">videos</code>.</li><li>Уникальная страница просмотра: <code class="inline">/video/[id]</code>.</li></ul>
+<p><strong>Обязательные поля для публикации</strong></p>
+<ul><li><code class="inline">title</code>, <code class="inline">category_id</code>, <code class="inline">video_url</code>.</li></ul>
+<h2>5.3 Категории</h2>
+<ul><li>Предзаполненный справочник <code class="inline">categories</code> (например: Музыка, Игры, Образование, Спорт).</li><li>Выбор категории обязателен при публикации.</li><li>На главной — фильтр по категориям.</li></ul>
+<h2>5.4 Рекомендации (v1)</h2>
+<p>Рекомендации реализуются <strong>серверной функцией</strong> (Route Handler или Supabase Edge Function), с отдельным модулем логики.</p>
+<p>Приоритеты подбора: 1. Видео каналов, на которые подписан пользователь. 2. Популярные видео за последние 7 дней (<code class="inline">views</code>). 3. Видео схожих категорий на основе истории просмотров пользователя.</p>
+<p><strong>Требование расширяемости</strong></p>
+<ul><li>Алгоритм должен быть изолирован в отдельном сервисе/функции для дальнейшей замены без переписывания UI.</li></ul>
+<h2>5.5 Комментарии (realtime)</h2>
+<ul><li>Под видео отображается список комментариев и ответов.</li><li>Иерархия: комментарий → ответы (через <code class="inline">parent_id</code>).</li><li>Создание комментария отправляет событие в Pusher.</li><li>Клиенты получают события и обновляют UI без перезагрузки.</li></ul>
+<h2>5.6 Уведомления</h2>
+<ul><li>Канал доставки: <code class="inline">user-{userId}</code>.</li><li>Типы:</li><li>новый комментарий к моему видео,</li><li>ответ на мой комментарий,</li><li>новое видео от канала, на который я подписан.</li><li>Все уведомления пишутся в <code class="inline">notifications</code>.</li><li>Поддержка статуса прочтения <code class="inline">is_read</code>.</li></ul>
+<h2>5.7 Сайдбар</h2>
+<ul><li>Разделы: Главная, Подписки, Библиотека, Категории.</li><li>Состояние свернуто/развернуто хранится локально (localStorage/контекст).</li><li>При сворачивании контентная область расширяется.</li></ul>
+<h2>5.8 Plyr</h2>
+<p>Единый компонент плеера используется в 2 режимах:</p>
+<ul><li><code class="inline">preview</code> (мини-проигрывание/hover/модалка),</li><li><code class="inline">watch</code> (основная страница видео).</li></ul>
+<p>Компонент принимает URL видео и режим работы.</p>
+<h2>5.9 Модерация, жалобы и роли</h2>
+<ul><li>Пользователь может отправить жалобу на видео, комментарий или канал с выбором причины из фиксированного списка и пояснением.</li><li>Очередь жалоб обрабатывают роли <code class="inline">moderator</code> и <code class="inline">admin</code> (панель <code class="inline">/admin</code>): фильтры по статусу и причине, поиск по тексту жалобы, закрытие с заметкой, удаление комментария или скрытие видео, бан пользователя с указанием срока и причины.</li><li>Автор видео может удалять комментарии под своими роликами и отмечать комментарии «сердцем автора» (неограниченное число комментариев).</li><li>Ответы на комментарии — <strong>один уровень</strong> (ответ только к корневому комментарию); при ответе адресату приходит уведомление в <code class="inline">notifications</code>.</li><li>Рекомендации на главной и в боковой панели просмотра: эвристика по просмотрам, лайкам, свежести, подпискам, истории просмотров и лайков, категории и автору.</li></ul>
+<h2>6) Схема данных (Supabase/PostgreSQL)</h2>
+<p>Ниже минимально необходимая структура.</p>
+<h3><code class="inline">users</code> (расширение профиля)</h3>
+<ul><li><code class="inline">id uuid pk</code> (ссылка на <code class="inline">auth.users.id</code>)</li><li><code class="inline">username text unique not null</code></li><li><code class="inline">avatar_url text null</code></li><li><code class="inline">subscribers_count int default 0</code></li><li><code class="inline">created_at timestamptz default now()</code></li></ul>
+<h3><code class="inline">categories</code></h3>
+<ul><li><code class="inline">id uuid pk</code></li><li><code class="inline">name text unique not null</code></li><li><code class="inline">slug text unique not null</code></li></ul>
+<h3><code class="inline">videos</code></h3>
+<ul><li><code class="inline">id uuid pk</code></li><li><code class="inline">user_id uuid not null</code></li><li><code class="inline">title text not null</code></li><li><code class="inline">description text null</code></li><li><code class="inline">category_id uuid not null</code></li><li><code class="inline">tags text[] default &#x27;{}&#x27;</code></li><li><code class="inline">video_url text not null</code></li><li><code class="inline">thumbnail_url text null</code></li><li><code class="inline">views int default 0</code></li><li><code class="inline">created_at timestamptz default now()</code></li></ul>
+<h3><code class="inline">subscriptions</code></h3>
+<ul><li><code class="inline">subscriber_id uuid not null</code></li><li><code class="inline">channel_id uuid not null</code></li><li><code class="inline">created_at timestamptz default now()</code></li><li><code class="inline">primary key (subscriber_id, channel_id)</code></li></ul>
+<h3><code class="inline">likes</code></h3>
+<ul><li><code class="inline">user_id uuid not null</code></li><li><code class="inline">video_id uuid not null</code></li><li><code class="inline">type text check (type in (&#x27;like&#x27;,&#x27;dislike&#x27;))</code></li><li><code class="inline">created_at timestamptz default now()</code></li><li><code class="inline">primary key (user_id, video_id)</code></li></ul>
+<h3><code class="inline">comments</code></h3>
+<ul><li><code class="inline">id uuid pk</code></li><li><code class="inline">video_id uuid not null</code></li><li><code class="inline">user_id uuid not null</code></li><li><code class="inline">parent_id uuid null</code></li><li><code class="inline">content text not null</code></li><li><code class="inline">created_at timestamptz default now()</code></li></ul>
+<h3><code class="inline">notifications</code></h3>
+<ul><li><code class="inline">id uuid pk</code></li><li><code class="inline">user_id uuid not null</code></li><li><code class="inline">type text not null</code></li><li><code class="inline">data jsonb not null</code></li><li><code class="inline">is_read boolean default false</code></li><li><code class="inline">created_at timestamptz default now()</code></li></ul>
+<h3><code class="inline">reports</code> (жалобы)</h3>
+<ul><li><code class="inline">reporter_id</code>, <code class="inline">target_type</code> (video | comment | channel), <code class="inline">target_id</code>, <code class="inline">reason_code</code>, <code class="inline">details</code>, <code class="inline">status</code>, <code class="inline">resolved_at</code>, <code class="inline">resolved_by</code>, <code class="inline">resolution_note</code>.</li></ul>
+<h3><code class="inline">comment_author_hearts</code></h3>
+<ul><li><code class="inline">comment_id</code>, <code class="inline">video_owner_id</code> — отметка автора канала на комментарии.</li></ul>
+<p>В профиле <code class="inline">users</code> дополнительно: <code class="inline">role</code> (user | moderator | admin), <code class="inline">banned_until</code>, <code class="inline">ban_reason_code</code>.</p>
+<h2>7) Индексы и ограничения (минимум)</h2>
+<ul><li>Индексы:</li><li><code class="inline">videos(created_at desc)</code></li><li><code class="inline">videos(category_id, created_at desc)</code></li><li><code class="inline">videos(views desc)</code></li><li><code class="inline">comments(video_id, created_at asc)</code></li><li><code class="inline">notifications(user_id, created_at desc)</code></li><li>Ограничения:</li><li><code class="inline">subscriptions.subscriber_id != subscriptions.channel_id</code></li><li><code class="inline">comments.parent_id</code> может ссылаться только на комментарий того же <code class="inline">video_id</code> (проверка в сервисе/триггере)</li></ul>
+<h2>8) RLS-политики (требуемый минимум)</h2>
+<ul><li>Публичное чтение: <code class="inline">categories</code>, публичные поля <code class="inline">videos</code>, <code class="inline">comments</code>.</li><li>Пользователь может:</li><li>редактировать только свой профиль,</li><li>добавлять/удалять только свои подписки,</li><li>добавлять и удалять только свои комментарии,</li><li>создавать/редактировать/удалять только свои видео,</li><li>читать/обновлять (is_read) только свои уведомления.</li></ul>
+<h2>9) API/сервисные контракты (минимум)</h2>
+<p>Примерная структура endpoint-слоя:</p>
+<ul><li><code class="inline">POST /api/videos/upload</code> — публикация видео и метаданных.</li><li><code class="inline">GET /api/videos/recommendations</code> — рекомендации v1.</li><li><code class="inline">GET /api/videos/:id/comments</code> + пагинация.</li><li><code class="inline">POST /api/videos/:id/comments</code> — новый комментарий.</li><li><code class="inline">POST /api/videos/:id/like</code> — like/dislike.</li><li><code class="inline">POST /api/channels/:id/subscribe</code> — подписка/отписка.</li><li><code class="inline">GET /api/notifications</code> и <code class="inline">PATCH /api/notifications/:id/read</code>.</li></ul>
+<h2>10) Real-time события (Pusher)</h2>
+<p>Минимальный набор событий:</p>
+<ul><li><code class="inline">comment.created</code></li><li><code class="inline">comment.replied</code></li><li><code class="inline">notification.created</code></li><li><code class="inline">video.created</code> (для подписчиков)</li></ul>
+<p>Формат payload должен содержать <code class="inline">id</code>, <code class="inline">type</code>, <code class="inline">created_at</code>, и данные сущности.</p>
+<h2>11) Пагинация</h2>
+<ul><li>Видео: cursor-based (по <code class="inline">created_at</code>, <code class="inline">id</code>) или page+limit (для MVP допустимо).</li><li>Комментарии: page+limit, ответы подгружаются отдельно или вместе (ограниченно).</li></ul>
+<h2>12) Нефункциональные требования</h2>
+<ul><li>Чистая модульная структура проекта.</li><li>Разделение server/client логики.</li><li>Обработка ошибок загрузки/доступа/валидации.</li><li>Базовая наблюдаемость: логирование ключевых ошибок.</li><li>Компонентная организация UI с минимизацией дублирования и явными контрактами пропсов.</li></ul>
+<h2>13) Критерии готовности MVP (Definition of Done)</h2>
+<ul><li>Пользователь может зарегистрироваться, войти, заполнить профиль.</li><li>Пользователь может загрузить видео и открыть его по <code class="inline">/video/[id]</code>.</li><li>Лента показывает рекомендации по правилам v1.</li><li>Комментарии и ответы обновляются в realtime у нескольких клиентов.</li><li>Уведомления создаются, приходят через realtime и сохраняются в БД.</li><li>Работают базовые RLS-политики, пользователь не видит/не изменяет чужие приватные данные.</li><li>Есть пагинация видео и комментариев.</li></ul>
+<h2>14) Этапы реализации</h2>
+<p>1. Инициализация проекта и env-конфигурации (<code class="inline">Next.js + Supabase + Pusher</code>). 2. Миграции БД, индексы, RLS. 3. Auth + профиль + канал. 4. Загрузка и публикация видео, страница просмотра, Plyr. 5. Категории, главная лента, базовые рекомендации. 6. Подписки, likes/dislikes, библиотека. 7. Комментарии + realtime. 8. Уведомления + realtime виджет. 9. Пагинация, обработка ошибок, стабилизация.</p>
+<h2>15) Явные ограничения разработки</h2>
+<ul><li>Не делать детальный дизайн и кастомные темы на данном этапе.</li><li>Не подключать тяжелые UI-фреймворки ради внешнего вида.</li><li>Фокус только на функциональности и корректной архитектуре.</li><li>Не реализовывать live-эфиры/стриминг и связанные с ними сущности в БД/API.</li></ul>
+  </article>
+  <footer class="doc-footer content">
+    Документ сформирован автоматически из репозитория проекта. При расхождении с актуальной разработкой ориентируйтесь на кодовую базу и согласованные изменения ТЗ.
+  </footer>
+</div>
+</body>
+</html>

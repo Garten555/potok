@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html {
+  overflow-x: clip;
+  max-width: 100%;
+  scrollbar-color: #22d3ee #0b1220;
+  scrollbar-width: thin;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: clip;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Только полоса у окна страницы. У * ломало UI: любой overflow:auto (поиск, меню)
+   получал яркий скроллбар рядом с кнопкой профиля. */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: #0b1220;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22d3ee 0%, #2563eb 100%);
+  border: 2px solid #0b1220;
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #67e8f9 0%, #3b82f6 100%);
+}
