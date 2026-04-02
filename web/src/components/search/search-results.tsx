@@ -368,10 +368,10 @@ export function SearchResults({ query }: SearchResultsProps) {
       key={v.id}
       className="group w-full rounded-xl border border-white/10 bg-white/[0.03] transition hover:border-cyan-300/30 hover:bg-white/[0.06]"
     >
-      <div className="flex gap-5 p-5">
+      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:gap-5 sm:p-5">
         <Link
           href={`/watch/${v.id}`}
-          className="relative w-80 shrink-0 overflow-hidden rounded-lg bg-[#0b1323]"
+          className="relative w-full shrink-0 overflow-hidden rounded-lg bg-[#0b1323] sm:w-72 md:w-80"
         >
           <div
             className="aspect-video w-full bg-cover bg-center transition group-hover:scale-[1.01]"
@@ -380,44 +380,49 @@ export function SearchResults({ query }: SearchResultsProps) {
         </Link>
 
         <div className="min-w-0 flex-1">
-          <Link href={`/watch/${v.id}`} className="block">
-            <h4 className="line-clamp-2 text-lg font-semibold leading-snug text-slate-100 transition group-hover:text-cyan-200">
-              {v.title}
-            </h4>
-          </Link>
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-base text-slate-500">
-            <ChannelAvatar
-              channelName={v.channel_name?.trim() || v.channel_handle || "Канал"}
-              avatarUrl={v.channel_avatar_url}
-              className="!h-9 !w-9 shrink-0"
-            />
-            <span>{(v.views ?? 0).toLocaleString("ru-RU")} просмотров</span>
-            {v.channel_name || v.channel_handle ? (
-              <>
-                <span className="text-slate-600" aria-hidden>
-                  ·
-                </span>
-                {v.channel_handle ? (
-                  <Link
-                    href={`/@${v.channel_handle}`}
-                    className="text-slate-300 transition hover:text-cyan-200"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {v.channel_name?.trim() || `@${v.channel_handle}`}
-                  </Link>
-                ) : (
-                  <span className="text-slate-300">{v.channel_name}</span>
-                )}
-              </>
-            ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0 flex-1">
+              <Link href={`/watch/${v.id}`} className="block">
+                <h4 className="line-clamp-2 text-base font-semibold leading-snug text-slate-100 transition group-hover:text-cyan-200 sm:text-lg">
+                  {v.title}
+                </h4>
+              </Link>
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-slate-500 sm:mt-3 sm:gap-x-3 sm:text-base">
+                <ChannelAvatar
+                  channelName={v.channel_name?.trim() || v.channel_handle || "Канал"}
+                  avatarUrl={v.channel_avatar_url}
+                  className="!h-8 !w-8 shrink-0 sm:!h-9 sm:!w-9"
+                />
+                <span>{(v.views ?? 0).toLocaleString("ru-RU")} просмотров</span>
+                {v.channel_name || v.channel_handle ? (
+                  <>
+                    <span className="text-slate-600" aria-hidden>
+                      ·
+                    </span>
+                    {v.channel_handle ? (
+                      <Link
+                        href={`/@${v.channel_handle}`}
+                        className="text-slate-300 transition hover:text-cyan-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {v.channel_name?.trim() || `@${v.channel_handle}`}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-300">{v.channel_name}</span>
+                    )}
+                  </>
+                ) : null}
+              </div>
+
+              <p className="mt-2 line-clamp-3 text-sm text-slate-400 sm:mt-3 sm:line-clamp-2 sm:text-base">
+                {v.description && v.description.trim() ? v.description : "Нет описания видео"}
+              </p>
+            </div>
+            <div className="shrink-0 self-end sm:self-start">
+              <SearchVideoCardMenu videoId={v.id} />
+            </div>
           </div>
-
-          <p className="mt-3 line-clamp-2 text-base text-slate-400">
-            {v.description && v.description.trim() ? v.description : "Нет описания видео"}
-          </p>
         </div>
-
-        <SearchVideoCardMenu videoId={v.id} />
       </div>
     </div>
   );

@@ -3,9 +3,10 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
-import { Search, History, Sparkles } from "lucide-react";
+import { Search, History, Sparkles, Mic, Keyboard, Square } from "lucide-react";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { clearSearchHistory, getSearchHistory, pushSearchHistory } from "@/lib/search-history";
+import { VirtualKeyboard } from "@/components/search/virtual-keyboard";
 
 type SuggestionChannel = {
   type: "channel";
@@ -40,13 +41,94 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const [focused, setFocused] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const speechRef = useRef<SpeechRecognition | null>(null);
   const activeFetchId = useRef(0);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showVirtualKeyboard, setShowVirtualKeyboard] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
 
   const minChars = 2;
   const isOverlay = variant === "overlay";
 
   const refreshHistory = () => setSearchHistory(getSearchHistory());
+
+  useEffect(() => {
+    if (!voiceHint) return;
+    const t = window.setTimeout(() => setVoiceHint(null), 3200);
+    return () => window.clearTimeout(t);
+  }, [voiceHint]);
+
+  const getSpeechRecognition = (): SpeechRecognition | null => {
+    if (typeof window === "undefined") return null;
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return Ctor ? new Ctor() : null;
+  };
+
+  const stopVoice = () => {
+    try {
+      speechRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    speechRef.current = null;
+    setVoiceListening(false);
+  };
+
+  const toggleVoice = () => {
+    if (voiceListening) {
+      stopVoice();
+      return;
+    }
+    const rec = getSpeechRecognition();
+    if (!rec) {
+      setVoiceHint("Голосовой ввод недоступен в этом браузере (нужен Chrome / Edge).");
+      return;
+    }
+    rec.lang = "ru-RU";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    rec.onresult = (event: SpeechRecognitionEvent) => {
+      const text = event.results[0]?.[0]?.transcript?.trim();
+      if (text) {
+        setQuery((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+        setIsOpen(true);
+      }
+    };
+    rec.onerror = () => {
+      setVoiceHint("Не удалось распознать речь. Проверьте микрофон.");
+      setVoiceListening(false);
+      speechRef.current = null;
+    };
+    rec.onend = () => {
+      setVoiceListening(false);
+      speechRef.current = null;
+    };
+    try {
+      speechRef.current = rec;
+      setVoiceListening(true);
+      rec.start();
+      inputRef.current?.focus();
+    } catch {
+      setVoiceHint("Не удалось запустить распознавание.");
+      setVoiceListening(false);
+      speechRef.current = null;
+    }
+  };
+
+  const insertFromKeyboard = (ch: string) => {
+    setQuery((prev) => prev + ch);
+    setIsOpen(true);
+    inputRef.current?.focus();
+  };
+
+  const backspaceFromKeyboard = () => {
+    setQuery((prev) => prev.slice(0, -1));
+    inputRef.current?.focus();
+  };
 
   /** Строка в шапке совпадает с адресом /search?q=… */
   useEffect(() => {
@@ -138,6 +220,16 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     onClose?.();
     router.push(`/search?q=${encodeURIComponent(cleaned)}`);
   };
+
+  useEffect(() => {
+    return () => {
+      try {
+        speechRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
 
   const onPickChannel = (s: SuggestionChannel) => {
     const typed = query.trim();
@@ -342,52 +434,147 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       )}
     >
       {isOverlay ? (
-        <div className="flex w-full items-center gap-2">
-          {leading ? <span className="shrink-0">{leading}</span> : null}
-          <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-slate-400">
-            <Search className="h-5 w-5 shrink-0 opacity-70" />
-            <input
-              className="w-full min-w-0 bg-transparent text-left text-base text-slate-200 outline-none placeholder:text-slate-500"
-              placeholder="Поиск по видео и каналам"
-              type="search"
-              autoFocus={isOverlay}
-              autoComplete="off"
-              aria-label="Поиск по видео и каналам"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit(query);
-                if (e.key === "Escape") {
-                  setIsOpen(false);
-                  onClose?.();
-                }
-              }}
-            />
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <div className="flex w-full items-center gap-2">
+            {leading ? <span className="shrink-0">{leading}</span> : null}
+            <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-slate-400">
+              <Search className="h-5 w-5 shrink-0 opacity-70" />
+              <input
+                ref={inputRef}
+                className="w-full min-w-0 bg-transparent text-left text-base text-slate-200 outline-none placeholder:text-slate-500"
+                placeholder="Поиск по видео и каналам"
+                type="search"
+                autoFocus={isOverlay}
+                autoComplete="off"
+                inputMode="search"
+                enterKeyHint="search"
+                aria-label="Поиск по видео и каналам"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit(query);
+                  if (e.key === "Escape") {
+                    setIsOpen(false);
+                    onClose?.();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => toggleVoice()}
+                className={clsx(
+                  "grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-slate-200 transition",
+                  voiceListening
+                    ? "border-rose-400/50 bg-rose-500/20 text-rose-100"
+                    : "border-white/10 bg-white/[0.05] hover:bg-white/[0.1]",
+                )}
+                title={voiceListening ? "Остановить" : "Голосовой ввод"}
+                aria-pressed={voiceListening}
+                aria-label={voiceListening ? "Остановить голосовой ввод" : "Голосовой ввод"}
+              >
+                {voiceListening ? <Square className="h-4 w-4 shrink-0" /> : <Mic className="h-5 w-5 shrink-0" />}
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowVirtualKeyboard((v) => !v)}
+                className={clsx(
+                  "grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition",
+                  showVirtualKeyboard
+                    ? "border-cyan-400/45 bg-cyan-500/20 text-cyan-50"
+                    : "border-white/10 bg-white/[0.05] text-slate-200 hover:bg-white/[0.1]",
+                )}
+                aria-pressed={showVirtualKeyboard}
+                aria-label="Экранная клавиатура"
+                title="Экранная клавиатура"
+              >
+                <Keyboard className="h-5 w-5 shrink-0" />
+              </button>
+            </div>
           </div>
+          {voiceHint ? <p className="text-center text-xs text-amber-200/90">{voiceHint}</p> : null}
+          {showVirtualKeyboard ? (
+            <VirtualKeyboard
+              compact
+              onInsert={insertFromKeyboard}
+              onBackspace={backspaceFromKeyboard}
+              onClose={() => setShowVirtualKeyboard(false)}
+            />
+          ) : null}
         </div>
       ) : (
-        <div
-          className={clsx(
-            "flex h-9 w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-slate-400",
-          )}
-        >
-          <Search className="h-4 w-4 shrink-0 opacity-70" />
-          <input
-            className="w-full min-w-0 bg-transparent text-left text-xs text-slate-200 outline-none placeholder:text-slate-500"
-            placeholder="Поиск"
-            type="search"
-            aria-label="Поиск по видео и каналам"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit(query);
-              if (e.key === "Escape") setIsOpen(false);
-            }}
-          />
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <div className="flex w-full items-center gap-1.5">
+            <div
+              className={clsx(
+                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-slate-400",
+              )}
+            >
+              <Search className="h-4 w-4 shrink-0 opacity-70" />
+              <input
+                ref={inputRef}
+                className="w-full min-w-0 bg-transparent text-left text-xs text-slate-200 outline-none placeholder:text-slate-500"
+                placeholder="Поиск"
+                type="search"
+                autoComplete="off"
+                inputMode="search"
+                enterKeyHint="search"
+                aria-label="Поиск по видео и каналам"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit(query);
+                  if (e.key === "Escape") setIsOpen(false);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => toggleVoice()}
+              className={clsx(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-200 transition",
+                voiceListening
+                  ? "border-rose-400/50 bg-rose-500/20 text-rose-100"
+                  : "border-white/10 bg-white/[0.05] hover:bg-white/[0.1]",
+              )}
+              aria-label={voiceListening ? "Остановить голосовой ввод" : "Голосовой ввод"}
+              title={voiceListening ? "Стоп" : "Голос"}
+            >
+              {voiceListening ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setShowVirtualKeyboard((v) => !v)}
+              className={clsx(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full border transition",
+                showVirtualKeyboard
+                  ? "border-cyan-400/45 bg-cyan-500/20 text-cyan-50"
+                  : "border-white/10 bg-white/[0.05] text-slate-200 hover:bg-white/[0.1]",
+              )}
+              aria-label="Экранная клавиатура"
+              title="Клавиатура"
+            >
+              <Keyboard className="h-4 w-4" />
+            </button>
+          </div>
+          {voiceHint ? <p className="text-[11px] text-amber-200/90">{voiceHint}</p> : null}
+          {showVirtualKeyboard ? (
+            <VirtualKeyboard
+              compact
+              onInsert={insertFromKeyboard}
+              onBackspace={backspaceFromKeyboard}
+              onClose={() => setShowVirtualKeyboard(false)}
+            />
+          ) : null}
         </div>
       )}
 

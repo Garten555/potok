@@ -143,8 +143,13 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         ) : null}
 
         <div className="mt-auto border-t border-white/8 pt-3">
-          <button
-            type="button"
+          <Link
+            href="/settings"
+            onClick={() => {
+              if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                onToggle();
+              }
+            }}
             className={clsx(
               "flex min-w-0 w-full items-center gap-3 rounded-xl py-2.5 text-slate-300 transition hover:bg-white/8 hover:text-white",
               showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
@@ -161,7 +166,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
             >
               Настройки
             </span>
-          </button>
+          </Link>
         </div>
       </div>
     </aside>
