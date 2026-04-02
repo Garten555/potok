@@ -1,6 +1,5 @@
 "use client";
 
-import type Plyr from "plyr";
 import {
   forwardRef,
   useEffect,
@@ -10,6 +9,10 @@ import {
 } from "react";
 import type { PlyrVideoHandle, PlyrVideoProps } from "@/components/video/plyr-video-types";
 
+/** Конструктор из ESM; в .d.ts смешаны `export=` и `default` — тип только через .default */
+type PlyrConstructor = typeof import("plyr").default;
+type PlyrInstance = InstanceType<PlyrConstructor>;
+
 export type { PlyrVideoHandle, PlyrVideoProps } from "@/components/video/plyr-video-types";
 
 /**
@@ -18,7 +21,7 @@ export type { PlyrVideoHandle, PlyrVideoProps } from "@/components/video/plyr-vi
 export const PlyrVideo = forwardRef<PlyrVideoHandle | null, PlyrVideoProps>(
   function PlyrVideo({ source, options, className }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const playerRef = useRef<InstanceType<typeof Plyr> | null>(null);
+    const playerRef = useRef<PlyrInstance | null>(null);
     const optionsRef = useRef(options);
     optionsRef.current = options;
 
@@ -45,7 +48,8 @@ export const PlyrVideo = forwardRef<PlyrVideoHandle | null, PlyrVideoProps>(
 
       void (async () => {
         try {
-          const { default: PlyrCtor } = await import("plyr");
+          const mod = await import("plyr");
+          const PlyrCtor = (mod as unknown as { default: PlyrConstructor }).default;
           if (cancelled || videoRef.current !== el) return;
 
           const player = new PlyrCtor(el, optionsRef.current ?? {});

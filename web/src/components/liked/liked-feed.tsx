@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Clock, ThumbsUp, Trash2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
+import { ChannelAvatar } from "@/components/channel/channel-avatar";
 
 type LikeRow = {
   video_id: string;
@@ -95,7 +96,7 @@ export function LikedFeed() {
         : { data: [] };
 
       const userRows = (usersRaw ?? []) as UserRow[];
-      setAuthors(new Map(userRows.map((u) => [u.id, u])));
+      setAuthors(new Map(userRows.map((u) => [String(u.id), u])));
       setItems(merged);
     } finally {
       setIsLoading(false);
@@ -194,9 +195,8 @@ export function LikedFeed() {
           ) : (
             <div className="space-y-3">
               {filtered.map(({ video, likedAt }) => {
-                const author = authors.get(video.user_id);
-                const avatarUrl = author?.avatar_url && author.avatar_url.trim() ? author.avatar_url : null;
-                const initial = author?.channel_name?.trim()?.[0]?.toUpperCase() ?? "К";
+                const author = authors.get(String(video.user_id));
+                const channelLabel = author?.channel_name?.trim() || "Канал";
 
                 return (
                   <Link
@@ -214,20 +214,11 @@ export function LikedFeed() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start gap-3">
-                          <div className="mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-[#0b1323]">
-                            {avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={avatarUrl}
-                                alt={author?.channel_name ?? "Канал"}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="grid h-full w-full place-items-center text-xs font-semibold text-slate-200">
-                                {initial}
-                              </div>
-                            )}
-                          </div>
+                          <ChannelAvatar
+                            channelName={channelLabel}
+                            avatarUrl={author?.avatar_url}
+                            className="mt-1 !h-10 !w-10 !text-xs shrink-0"
+                          />
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start gap-2">

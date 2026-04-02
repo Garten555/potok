@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPusherClient } from "@/lib/pusher/client";
 import { triggerPusherEvent } from "@/lib/pusher/trigger";
+import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ReportDialog } from "@/components/report/report-dialog";
 import { Heart, MessageCircle, Trash2 } from "lucide-react";
 import clsx from "clsx";
@@ -14,7 +15,10 @@ type CommentRow = {
   created_at: string;
   user_id: string;
   parent_id: string | null;
-  users?: { channel_name?: string | null } | Array<{ channel_name?: string | null }> | null;
+  users?:
+    | { channel_name?: string | null; avatar_url?: string | null }
+    | Array<{ channel_name?: string | null; avatar_url?: string | null }>
+    | null;
 };
 
 type CommentsSectionProps = {
@@ -41,7 +45,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     const supabase = createSupabaseBrowserClient();
     const { data } = await supabase
       .from("comments")
-      .select("id, content, created_at, user_id, parent_id, users!comments_user_id_fkey(channel_name)")
+      .select("id, content, created_at, user_id, parent_id, users!comments_user_id_fkey(channel_name, avatar_url)")
       .eq("video_id", videoId)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -205,7 +209,13 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 gap-2">
+            <ChannelAvatar
+              channelName={author?.channel_name ?? "Пользователь"}
+              avatarUrl={author?.avatar_url}
+              className="!h-9 !w-9 !text-sm shrink-0"
+            />
+            <div className="min-w-0 flex-1">
             <p className="text-xs text-cyan-200/90">{author?.channel_name ?? "Пользователь"}</p>
             {hearts.has(item.id) ? (
               <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-rose-300/90">
@@ -214,6 +224,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
             ) : null}
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{item.content}</p>
             <p className="mt-1 text-xs text-slate-500">{new Date(item.created_at).toLocaleString("ru-RU")}</p>
+            </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             {showHeart ? (

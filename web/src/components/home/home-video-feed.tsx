@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { HomeCategoryId } from "@/components/home/categories";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { PlayCircle } from "lucide-react";
+import { formatPublishedAgo } from "@/lib/format-published-ago";
 import { scoreVideoForHome, type RecContext } from "@/lib/recommendations";
 
 /**
@@ -35,7 +37,9 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
     likedVideoIds: new Set(),
     watchedVideoIds: new Set(),
   });
-  const [authorsMap, setAuthorsMap] = useState<Map<string, string>>(new Map());
+  const [authorsMap, setAuthorsMap] = useState<
+    Map<string, { channel_name: string; avatar_url: string | null }>
+  >(new Map());
   const [categoryById, setCategoryById] = useState<Map<string, string>>(new Map());
   const [now, setNow] = useState(() => Date.now());
 
@@ -112,8 +116,21 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
 
       const userIds = Array.from(new Set(loadedVideos.map((video) => video.user_id).filter(Boolean)));
       if (userIds.length > 0) {
-        const { data: authors } = await supabase.from("users").select("id, channel_name").in("id", userIds);
-        setAuthorsMap(new Map((authors ?? []).map((author) => [author.id, author.channel_name ?? "Канал"])));
+        const { data: authors } = await supabase
+          .from("users")
+          .select("id, channel_name, avatar_url")
+          .in("id", userIds);
+        setAuthorsMap(
+          new Map(
+            (authors ?? []).map((row) => {
+              const a = row as { id: string; channel_name: string | null; avatar_url: string | null };
+              return [
+                String(a.id),
+                { channel_name: a.channel_name ?? "Канал", avatar_url: a.avatar_url ?? null },
+              ];
+            }),
+          ),
+        );
       }
 
       const { data: categories } = await supabase.from("categories").select("id, slug");
@@ -164,7 +181,8 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
             }
           >
             {filteredVideos.map((video) => {
-              const authorName = video.user_id ? authorsMap.get(video.user_id) ?? "Канал" : "Канал";
+              const meta = video.user_id ? authorsMap.get(String(video.user_id)) : undefined;
+              const authorName = meta?.channel_name ?? "Канал";
               return (
                 <Link
                   key={video.id}
@@ -179,11 +197,22 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
                     <h3 className="line-clamp-2 text-sm font-medium text-slate-100 transition group-hover:text-cyan-200">
                       {video.title}
                     </h3>
-                    <p className="mt-1 truncate text-xs text-slate-400">
-                      {authorName}
-                    </p>
+                    <div className="mt-1 flex min-w-0 items-center gap-2">
+                      <ChannelAvatar
+                        channelName={authorName}
+                        avatarUrl={meta?.avatar_url ?? null}
+                        className="!h-8 !w-8 !text-xs shrink-0"
+                      />
+                      <p className="truncate text-xs text-slate-400">{authorName}</p>
+                    </div>
                     <p className="mt-1 text-xs text-slate-500">
                       {(video.views ?? 0).toLocaleString("ru-RU")} просмотров
+                      {video.created_at ? (
+                        <>
+                          {" · "}
+                          <span className="text-slate-400">{formatPublishedAgo(video.created_at, now)}</span>
+                        </>
+                      ) : null}
                     </p>
                   </div>
                 </Link>

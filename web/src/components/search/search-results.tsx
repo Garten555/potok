@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Heart, SlidersHorizontal, Video, User } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
+import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type SearchResultsProps = {
@@ -21,6 +22,7 @@ type VideoRow = {
   user_id: string;
   channel_name?: string | null;
   channel_handle?: string | null;
+  channel_avatar_url?: string | null;
   description: string | null;
   tags: string[] | null;
   visibility: string;
@@ -124,11 +126,28 @@ export function SearchResults({ query }: SearchResultsProps) {
         // Подтягиваем данные канала для отображения рядом с видео.
         const userIds = Array.from(new Set(rawVideos.map((v) => v.user_id)));
         const { data: usersRows } = userIds.length
-          ? await supabase.from("users").select("id,channel_name,channel_handle").in("id", userIds)
+          ? await supabase
+              .from("users")
+              .select("id,channel_name,channel_handle,avatar_url")
+              .in("id", userIds)
           : { data: [] };
-        const usersById = new Map<string, { channel_name: string | null; channel_handle: string | null }>(
-          ((usersRows ?? []) as unknown as Array<{ id: string; channel_name: string | null; channel_handle: string | null }>)
-            .map((u) => [String(u.id), { channel_name: u.channel_name, channel_handle: u.channel_handle }]),
+        const usersById = new Map<
+          string,
+          { channel_name: string | null; channel_handle: string | null; avatar_url: string | null }
+        >(
+          ((usersRows ?? []) as unknown as Array<{
+            id: string;
+            channel_name: string | null;
+            channel_handle: string | null;
+            avatar_url: string | null;
+          }>).map((u) => [
+            String(u.id),
+            {
+              channel_name: u.channel_name,
+              channel_handle: u.channel_handle,
+              avatar_url: u.avatar_url ?? null,
+            },
+          ]),
         );
 
         const scoredVideos = rawVideos.map((v) => {
@@ -153,9 +172,10 @@ export function SearchResults({ query }: SearchResultsProps) {
           })();
           const viewsNum = typeof v.views === "number" ? v.views : 0;
 
-          const userMeta = usersById.get(v.user_id);
+          const userMeta = usersById.get(String(v.user_id));
           v.channel_name = userMeta?.channel_name ?? null;
           v.channel_handle = userMeta?.channel_handle ?? null;
+          v.channel_avatar_url = userMeta?.avatar_url ?? null;
 
           return { v, relevanceScore, createdAtMs, viewsNum };
         });
@@ -391,7 +411,12 @@ export function SearchResults({ query }: SearchResultsProps) {
                           {v.title}
                         </h4>
                       </Link>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-slate-500">
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-base text-slate-500">
+                        <ChannelAvatar
+                          channelName={v.channel_name?.trim() || v.channel_handle || "Канал"}
+                          avatarUrl={v.channel_avatar_url}
+                          className="!h-9 !w-9 shrink-0"
+                        />
                         <span>{(v.views ?? 0).toLocaleString("ru-RU")} просмотров</span>
                         {v.channel_name || v.channel_handle ? (
                           <>
