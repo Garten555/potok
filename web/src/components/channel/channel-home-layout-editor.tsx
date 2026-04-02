@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
@@ -372,7 +371,7 @@ export function ChannelHomeLayoutEditor({
           title={
             draft.length >= MAX_SECTIONS
               ? "Достигнут лимит разделов"
-              : "Добавить ряд или перейти к плейлистам в студии"
+              : "Добавить ряд с плейлистом или открыть вкладку «Плейлисты» в студии"
           }
           className={clsx(
             "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
@@ -388,12 +387,6 @@ export function ChannelHomeLayoutEditor({
               ? "Открыть плейлисты"
               : "Ряд из плейлиста"}
         </button>
-        <Link
-          href="/studio?tab=playlists"
-          className="inline-flex items-center rounded-lg border border-cyan-400/35 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/15"
-        >
-          Плейлисты в студии
-        </Link>
         <button
           type="button"
           onClick={addSpotlight}
