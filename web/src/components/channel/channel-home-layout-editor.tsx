@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
@@ -96,25 +95,6 @@ export function ChannelHomeLayoutEditor({
     setDraft((prev) => [
       ...prev,
       { key: `new-${Date.now()}`, kind: "uploads", playlistId: null, title: "Видео" },
-    ]);
-  };
-
-  const addPlaylist = () => {
-    if (draft.length >= MAX_SECTIONS) return;
-    const available = channelPlaylists.find((p) => !usedPlaylistIds.has(p.id));
-    if (!available) {
-      setError("Нет доступных плейлистов или все уже добавлены.");
-      return;
-    }
-    setError("");
-    setDraft((prev) => [
-      ...prev,
-      {
-        key: `new-${Date.now()}`,
-        kind: "playlist",
-        playlistId: available.id,
-        title: available.title,
-      },
     ]);
   };
 
@@ -348,49 +328,64 @@ export function ChannelHomeLayoutEditor({
       <ul className={clsx("mt-3 space-y-2.5 overflow-y-auto pr-1", listMaxH)}>{draftRows}</ul>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+        {uploadsCount === 0 ? (
+          <button
+            type="button"
+            onClick={addUploads}
+            disabled={draft.length >= MAX_SECTIONS}
+            className={clsx(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
+              draft.length >= MAX_SECTIONS
+                ? "cursor-not-allowed border-white/5 opacity-50"
+                : "border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+            )}
+          >
+            <Plus className="h-3.5 w-3.5" /> Все видео
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={addUploads}
-          disabled={draft.length >= MAX_SECTIONS || uploadsCount >= 1}
-          title={uploadsCount >= 1 ? "Ряд «Все видео» уже добавлен" : undefined}
-          className={clsx(
-            "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
-            draft.length >= MAX_SECTIONS || uploadsCount >= 1
-              ? "cursor-not-allowed border-white/5 opacity-50"
-              : "border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
-          )}
-        >
-          <Plus className="h-3.5 w-3.5" /> Все видео
-        </button>
-        <Link
-          href="/studio?tab=playlists"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2 text-xs font-bold text-slate-100 transition hover:bg-white/12"
-        >
-          <Plus className="h-3.5 w-3.5" /> Плейлист
-        </Link>
-        <button
-          type="button"
-          onClick={addPlaylist}
+          onClick={() => {
+            setError("");
+            if (draft.length >= MAX_SECTIONS) return;
+            if (channelPlaylists.length === 0) {
+              router.push("/studio?tab=playlists");
+              return;
+            }
+            const available = channelPlaylists.find((p) => !usedPlaylistIds.has(p.id));
+            if (!available) {
+              setError("Все плейлисты уже в рядах. Создайте новый во вкладке «Плейлисты».");
+              return;
+            }
+            setDraft((prev) => [
+              ...prev,
+              {
+                key: `new-${Date.now()}`,
+                kind: "playlist",
+                playlistId: available.id,
+                title: available.title,
+              },
+            ]);
+          }}
           disabled={
             draft.length >= MAX_SECTIONS ||
-            channelPlaylists.length === 0 ||
-            usedPlaylistIds.size >= channelPlaylists.length
+            (channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length)
           }
           title={
-            channelPlaylists.length === 0
-              ? "Сначала создайте плейлист во вкладке «Плейлисты»"
-              : usedPlaylistIds.size >= channelPlaylists.length
-                ? "Все плейлисты уже добавлены в ряды"
-                : undefined
+            channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length
+              ? "Все плейлисты уже добавлены — создайте новый"
+              : undefined
           }
           className={clsx(
             "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition",
-            draft.length >= MAX_SECTIONS || channelPlaylists.length === 0 || usedPlaylistIds.size >= channelPlaylists.length
+            draft.length >= MAX_SECTIONS ||
+              (channelPlaylists.length > 0 && usedPlaylistIds.size >= channelPlaylists.length)
               ? "cursor-not-allowed border-white/5 opacity-50"
               : "border-white/15 bg-white/[0.07] text-slate-100 hover:bg-white/12",
           )}
         >
-          <Plus className="h-3.5 w-3.5" /> Ряд из плейлиста
+          <Plus className="h-3.5 w-3.5" />
+          {channelPlaylists.length === 0 ? "Создать плейлист" : "Ряд из плейлиста"}
         </button>
         <button
           type="button"
