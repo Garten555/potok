@@ -88,6 +88,13 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       return;
     }
 
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setVoiceHint(
+        "Микрофон в браузере доступен только по безопасному адресу: https:// или http://127.0.0.1 / localhost. Откройте сайт не по IP в сети (192.168…) без HTTPS — иначе разрешение будет заблокировано.",
+      );
+      return;
+    }
+
     /**
      * Web Speech API сама по себе часто не показывает запрос доступа к микрофону.
      * Явный getUserMedia вызывает системный диалог; поток сразу останавливаем — слушает recognition.
@@ -100,7 +107,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
         const name = e instanceof Error ? e.name : "";
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
           setVoiceHint(
-            "Микрофон заблокирован для этого сайта. Нажмите на значок слева от адреса → «Разрешения» → включите микрофон.",
+            "Доступ к микрофону отклонён. В Chrome: значок слева от адреса → настройки сайта → Микрофон → «Разрешить». Если пункта нет — chrome://settings/content/microphone и снимите блокировку для сайта.",
           );
           return;
         }
