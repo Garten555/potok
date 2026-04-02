@@ -1,20 +1,11 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { Search, History, Sparkles } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { clearSearchHistory, getSearchHistory, pushSearchHistory } from "@/lib/search-history";
-import {
-  channelHandleBoost,
-  extractTokens,
-  matchStrength,
-  normalizeSearch,
-  tokenHitsInText,
-} from "@/lib/search-relevance";
-import { fuzzyRankPhraseCandidates } from "@/lib/search-query-suggest";
 
 type SuggestionChannel = {
   type: "channel";
@@ -24,33 +15,6 @@ type SuggestionChannel = {
   avatar_url: string | null;
   matchScore: number;
 };
-
-type UserRowRaw = {
-  id: string;
-  channel_name: string | null;
-  channel_handle: string | null;
-  avatar_url: string | null;
-  subscribers_count?: number | null;
-};
-
-/** Кандидаты для подсказок ранжируются через @m31coding/fuzzy-search (RU/EN, fuzzy + prefix). */
-function buildPhraseHints(
-  q: string,
-  history: string[],
-  titleSamples: string[],
-  channels: SuggestionChannel[],
-): string[] {
-  const nq = normalizeSearch(q);
-  if (nq.length < 2) return [];
-
-  const candidates: string[] = [...history, ...titleSamples];
-  for (const c of channels) {
-    candidates.push(c.channel_name);
-    if (c.channel_handle) candidates.push(`@${c.channel_handle}`);
-  }
-
-  return fuzzyRankPhraseCandidates(q, candidates, 10);
-}
 
 export type SmartSearchProps = {
   /** compact — строка в шапке; overlay — полноэкранный слой (мобильный) */
@@ -66,7 +30,6 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const urlQuery = searchParams.get("q");
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -136,67 +99,26 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
 
     const timeout = window.setTimeout(async () => {
       try {
-        const tokens = extractTokens(q);
-
-        const [{ data: titlesMatch }, { data: titlesPrefix }, { data: channelsRaw }] = await Promise.all([
-          supabase
-            .from("videos")
-            .select("title")
-            .in("visibility", ["public", "unlisted"])
-            .ilike("title", `%${q}%`)
-            .order("created_at", { ascending: false })
-            .limit(45),
-          supabase
-            .from("videos")
-            .select("title")
-            .in("visibility", ["public", "unlisted"])
-            .ilike("title", `${q}%`)
-            .order("created_at", { ascending: false })
-            .limit(25),
-          supabase
-            .from("users")
-            .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
-            .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
-            .order("subscribers_count", { ascending: false })
-            .limit(10),
-        ]);
-
-        const titleSet = new Set<string>();
-        for (const row of [...(titlesMatch ?? []), ...(titlesPrefix ?? [])]) {
-          const t = String((row as { title?: string }).title ?? "").trim();
-          if (t.length >= 2) titleSet.add(t);
-        }
-        const titleSamples = [...titleSet];
-
-        const channels = (channelsRaw ?? []) as UserRowRaw[];
-        const scoredChannels: SuggestionChannel[] = channels.map((ch) => {
-          const name = String(ch.channel_name ?? "");
-          const handle = (ch.channel_handle as string) ?? null;
-          const subs = typeof ch.subscribers_count === "number" ? ch.subscribers_count : 0;
-          const nameScore = matchStrength(q, name);
-          const handleScore = channelHandleBoost(q, handle);
-          const subBoost = Math.min(28, Math.round(Math.log10(subs + 10) * 8));
-          const tokenB = tokenHitsInText(`${name} ${handle ?? ""}`, tokens) * 12;
-          return {
-            type: "channel" as const,
-            id: String(ch.id),
-            channel_name: name,
-            channel_handle: handle,
-            avatar_url: (ch.avatar_url as string) ?? null,
-            matchScore: nameScore * 1.1 + handleScore + tokenB + subBoost,
-          };
+        const res = await fetch("/api/search/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ q, history: getSearchHistory() }),
         });
-
-        scoredChannels.sort((a, b) => b.matchScore - a.matchScore);
+        const data = (await res.json()) as { channels?: SuggestionChannel[]; phrases?: string[] };
 
         if (fetchId !== activeFetchId.current) return;
-        setSuggestions(scoredChannels);
-        setPhraseHints(buildPhraseHints(q, getSearchHistory(), titleSamples, scoredChannels));
+        if (!res.ok) {
+          setSuggestions([]);
+          setPhraseHints([]);
+        } else {
+          setSuggestions(Array.isArray(data.channels) ? data.channels : []);
+          setPhraseHints(Array.isArray(data.phrases) ? data.phrases : []);
+        }
         setIsOpen(true);
       } catch {
         if (fetchId !== activeFetchId.current) return;
         setSuggestions([]);
-        setPhraseHints(buildPhraseHints(q, getSearchHistory(), [], []));
+        setPhraseHints([]);
         setIsOpen(true);
       } finally {
         if (fetchId !== activeFetchId.current) return;
@@ -205,7 +127,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     }, 220);
 
     return () => window.clearTimeout(timeout);
-  }, [query, supabase]);
+  }, [query]);
 
   const submit = (q: string) => {
     const cleaned = q.trim();
