@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { ChannelBrandingControls } from "@/components/channel/branding-editor";
+import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelHomeLayoutEditor } from "@/components/channel/channel-home-layout-editor";
 import { ChannelIdentityForm } from "@/components/studio/channel-identity-form";
 import type { ChannelHomeLayoutRow, ChannelPlaylistCard } from "@/lib/channel-home-types";
@@ -208,46 +208,19 @@ export function StudioChannelAppearancePanel() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-bold text-slate-100">Аватар и шапка</h2>
-        <div
-          className="relative h-40 w-full overflow-hidden rounded-xl border border-white/10 sm:h-48"
-          style={
-            bannerUrl
-              ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-              : undefined
-          }
-        >
-          {!bannerUrl ? (
-            <div className="h-full w-full bg-[radial-gradient(120%_120%_at_15%_20%,rgba(34,211,238,0.35),rgba(15,23,42,0.05)_42%),linear-gradient(135deg,#111c33_0%,#0d1428_55%,#0a1222_100%)]" />
-          ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#08101d]/90 via-transparent to-transparent" />
+        <h2 className="text-base font-semibold tracking-tight text-slate-100">Аватар и шапка</h2>
+        <p className="text-sm text-slate-500">
+          Как на странице канала: одна кнопка на шапке — открывает редактор. После сохранения страница
+          перезагрузится.
+        </p>
+        <ChannelBannerStrip bannerUrl={bannerUrl}>
           <ChannelBrandingControls
             userId={userId}
             channelName={channelName}
             initialAvatarUrl={avatarUrl}
             initialBannerUrl={bannerUrl}
-            entry="dual"
-            bannerButtonClassName="absolute right-3 top-3 z-20"
-            avatarButtonClassName="absolute bottom-3 left-20 z-20 p-2 sm:left-24"
           />
-          <div className="pointer-events-none absolute bottom-3 left-3 z-10">
-            <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/20 bg-[#1a2a44] shadow-lg sm:h-20 sm:w-20">
-              <div
-                className="h-full w-full bg-cover bg-center text-2xl font-semibold text-white"
-                style={
-                  avatarUrl
-                    ? { backgroundImage: `url(${avatarUrl})` }
-                    : { display: "grid", placeItems: "center" }
-                }
-              >
-                {avatarUrl ? null : (channelName.slice(0, 1) || "К").toUpperCase()}
-              </div>
-            </div>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500">
-          После сохранения страница перезагрузится — так подтянутся новые изображения.
-        </p>
+        </ChannelBannerStrip>
       </div>
 
       <div className="space-y-2">

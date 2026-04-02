@@ -1,26 +1,50 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Camera, ImageIcon, Pencil, Upload, X } from "lucide-react";
+import { Camera, ImageIcon, Upload, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+export type ChannelBannerStripProps = {
+  bannerUrl: string | null;
+  children?: ReactNode;
+  className?: string;
+};
+
+/** Тот же баннер, что на публичной странице канала: высота, градиенты, рамка. */
+export function ChannelBannerStrip({ bannerUrl, children, className }: ChannelBannerStripProps) {
+  return (
+    <section
+      className={clsx(
+        "relative h-40 w-full overflow-hidden border-y border-white/10 bg-[#0f1628] sm:h-56",
+        className,
+      )}
+      style={
+        bannerUrl
+          ? {
+              backgroundImage: `url(${bannerUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
+          : undefined
+      }
+    >
+      {!bannerUrl ? (
+        <div className="h-full w-full bg-[radial-gradient(120%_120%_at_15%_20%,rgba(34,211,238,0.35),rgba(15,23,42,0.05)_42%),linear-gradient(135deg,#111c33_0%,#0d1428_55%,#0a1222_100%)]" />
+      ) : null}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#08101d] via-[#08101d]/50 to-transparent" />
+      {children}
+    </section>
+  );
+}
 
 export type ChannelBrandingControlsProps = {
   userId: string;
   channelName: string;
   initialAvatarUrl: string | null;
   initialBannerUrl: string | null;
-  /**
-   * dual — две иконки (шапка + аватар), как в студии;
-   * single — одна кнопка «оформление» на шапке (страница канала).
-   */
-  entry?: "dual" | "single";
-  /** dual: кнопка шапки */
-  bannerButtonClassName?: string;
-  /** dual: кнопка аватара */
-  avatarButtonClassName?: string;
-  /** single: одна кнопка на баннере */
-  singleButtonClassName?: string;
+  /** Позиция кнопки «Аватар и шапка» на баннере (по умолчанию как на странице канала). */
+  openButtonClassName?: string;
 };
 
 type ValidationResult = {
@@ -101,10 +125,7 @@ export function ChannelBrandingControls({
   channelName,
   initialAvatarUrl,
   initialBannerUrl,
-  entry = "dual",
-  bannerButtonClassName,
-  avatarButtonClassName,
-  singleButtonClassName,
+  openButtonClassName,
 }: ChannelBrandingControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
@@ -210,47 +231,18 @@ export function ChannelBrandingControls({
 
   return (
     <>
-      {entry === "single" ? (
-        <button
-          type="button"
-          onClick={open}
-          className={clsx(
-            "inline-flex items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/30 sm:text-sm",
-            singleButtonClassName ?? "absolute right-3 top-3 z-20",
-          )}
-          aria-label="Сменить аватар или шапку"
-        >
-          <Camera className="h-4 w-4 shrink-0" />
-          Аватар и шапка
-        </button>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={open}
-            className={clsx(
-              "rounded-lg border border-cyan-300/35 bg-cyan-500/20 p-2 text-cyan-100 transition hover:bg-cyan-500/30",
-              bannerButtonClassName ?? "absolute right-3 top-3 z-20",
-            )}
-            aria-label="Сменить шапку канала"
-            title="Сменить шапку"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={open}
-            className={clsx(
-              "rounded-lg border border-cyan-300/35 bg-cyan-500/20 p-1.5 text-cyan-100 transition hover:bg-cyan-500/30",
-              avatarButtonClassName ?? "absolute right-1 bottom-1 top-auto z-20",
-            )}
-            aria-label="Сменить аватар канала"
-            title="Сменить аватар"
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        onClick={open}
+        className={clsx(
+          "inline-flex items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/30 sm:text-sm",
+          openButtonClassName ?? "absolute right-3 top-3 z-20",
+        )}
+        aria-label="Сменить аватар или шапку"
+      >
+        <Camera className="h-4 w-4 shrink-0" />
+        Аватар и шапка
+      </button>
 
       {isOpen ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">

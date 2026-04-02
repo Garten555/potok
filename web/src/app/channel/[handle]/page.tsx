@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppHeader } from "@/components/layout/app-header";
-import { ChannelBrandingControls } from "@/components/channel/branding-editor";
+import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ChannelTabs } from "@/components/channel/channel-tabs";
 import type { SpotlightChannel } from "@/components/channel/channel-spotlight-strip";
@@ -305,32 +305,16 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     <div>
       <AppHeader />
       <div className="w-full">
-        <section
-          className="relative h-40 w-full overflow-hidden border-y border-white/10 bg-[#0f1628] sm:h-56"
-          style={
-            user.banner_url
-              ? {
-                  backgroundImage: `url(${user.banner_url})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : undefined
-          }
-        >
-          {!user.banner_url ? (
-            <div className="h-full w-full bg-[radial-gradient(120%_120%_at_15%_20%,rgba(34,211,238,0.35),rgba(15,23,42,0.05)_42%),linear-gradient(135deg,#111c33_0%,#0d1428_55%,#0a1222_100%)]" />
-          ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#08101d] via-[#08101d]/50 to-transparent" />
+        <ChannelBannerStrip bannerUrl={user.banner_url}>
           {isOwner ? (
             <ChannelBrandingControls
               userId={user.id}
               channelName={user.channel_name ?? ""}
               initialAvatarUrl={user.avatar_url}
               initialBannerUrl={user.banner_url}
-              entry="single"
             />
           ) : null}
-        </section>
+        </ChannelBannerStrip>
         <section className="mt-4 w-full border-y border-white/10 bg-[#0c1120] px-4 py-4 sm:px-6 sm:py-6">
           <div className="mx-auto flex max-w-[1280px] flex-col gap-4">
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
