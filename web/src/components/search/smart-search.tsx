@@ -3,9 +3,8 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
-import { Search, Video, History, Sparkles } from "lucide-react";
+import { Search, History, Sparkles } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useAuthState } from "@/components/auth/auth-context";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { clearSearchHistory, getSearchHistory, pushSearchHistory } from "@/lib/search-history";
 import {
@@ -13,21 +12,9 @@ import {
   extractTokens,
   matchStrength,
   normalizeSearch,
-  recencyBoost,
   tokenHitsInText,
-  viewsSoftBoost,
 } from "@/lib/search-relevance";
-
-type SuggestionVideo = {
-  type: "video";
-  id: string;
-  title: string;
-  thumbnail_url: string | null;
-  views: number | null;
-  channel_name: string | null;
-  channel_handle: string | null;
-  matchScore: number;
-};
+import { fuzzyRankPhraseCandidates } from "@/lib/search-query-suggest";
 
 type SuggestionChannel = {
   type: "channel";
@@ -38,20 +25,6 @@ type SuggestionChannel = {
   matchScore: number;
 };
 
-type Suggestion = SuggestionVideo | SuggestionChannel;
-
-type VideoRowRaw = {
-  id: string;
-  title: string | null;
-  thumbnail_url: string | null;
-  views: number | null;
-  created_at: string | null;
-  user_id: string;
-  description: string | null;
-  tags: string[] | null;
-  visibility: string | null;
-};
-
 type UserRowRaw = {
   id: string;
   channel_name: string | null;
@@ -60,40 +33,23 @@ type UserRowRaw = {
   subscribers_count?: number | null;
 };
 
+/** Кандидаты для подсказок ранжируются через @m31coding/fuzzy-search (RU/EN, fuzzy + prefix). */
 function buildPhraseHints(
   q: string,
   history: string[],
-  videos: SuggestionVideo[],
+  titleSamples: string[],
   channels: SuggestionChannel[],
 ): string[] {
   const nq = normalizeSearch(q);
   if (nq.length < 2) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
 
-  const push = (s: string) => {
-    const t = s.trim();
-    if (t.length < 2) return;
-    const k = normalizeSearch(t);
-    if (k === nq) return;
-    if (seen.has(k)) return;
-    seen.add(k);
-    out.push(t);
-  };
-
-  for (const h of history) {
-    const nh = normalizeSearch(h);
-    if (nh.startsWith(nq) || nh.includes(nq)) push(h);
-  }
-  for (const v of videos) {
-    const nt = normalizeSearch(v.title);
-    if (nt.startsWith(nq) || nt.includes(nq)) push(v.title);
-  }
+  const candidates: string[] = [...history, ...titleSamples];
   for (const c of channels) {
-    push(c.channel_name);
-    if (c.channel_handle) push(`@${c.channel_handle}`);
+    candidates.push(c.channel_name);
+    if (c.channel_handle) candidates.push(`@${c.channel_handle}`);
   }
-  return out.slice(0, 8);
+
+  return fuzzyRankPhraseCandidates(q, candidates, 10);
 }
 
 export type SmartSearchProps = {
@@ -110,12 +66,11 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const urlQuery = searchParams.get("q");
-  const { isAuthenticated } = useAuthState();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionChannel[]>([]);
   const [phraseHints, setPhraseHints] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
@@ -183,120 +138,35 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       try {
         const tokens = extractTokens(q);
 
-        let likedIds = new Set<string>();
-        let watchedIds = new Set<string>();
-        if (isAuthenticated) {
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData.user) {
-            const { data: likedRows } = await supabase
-              .from("likes")
-              .select("video_id")
-              .eq("user_id", userData.user.id)
-              .eq("type", "like");
-            likedIds = new Set(
-              (likedRows ?? []).map((r) => String((r as { video_id: string }).video_id)),
-            );
-
-            const { data: watchedRows } = await supabase
-              .from("watch_history")
-              .select("video_id")
-              .eq("user_id", userData.user.id)
-              .order("watched_at", { ascending: false })
-              .limit(30);
-            watchedIds = new Set(
-              (watchedRows ?? []).map((r) => String((r as { video_id: string }).video_id)),
-            );
-          }
-        }
-
-        const likeBoost = (id: string) => (likedIds.has(id) ? 80 : 0);
-        const watchBoost = (id: string) => (watchedIds.has(id) ? 40 : 0);
-
-        const { data: videosRaw } = await supabase
-          .from("videos")
-          .select("id,title,thumbnail_url,views,created_at,user_id,description,tags,visibility")
-          .in("visibility", ["public", "unlisted"])
-          .ilike("title", `%${q}%`)
-          .order("created_at", { ascending: false })
-          .limit(12);
-
-        const videos = (videosRaw ?? []) as VideoRowRaw[];
-
-        let videos2: VideoRowRaw[] = [];
-        if (videos.length < 6) {
-          const { data: videosRaw2 } = await supabase
+        const [{ data: titlesMatch }, { data: titlesPrefix }, { data: channelsRaw }] = await Promise.all([
+          supabase
             .from("videos")
-            .select("id,title,thumbnail_url,views,created_at,user_id,description,tags,visibility")
+            .select("title")
             .in("visibility", ["public", "unlisted"])
-            .ilike("description", `%${q}%`)
+            .ilike("title", `%${q}%`)
             .order("created_at", { ascending: false })
-            .limit(8);
-          videos2 = (videosRaw2 ?? []) as VideoRowRaw[];
+            .limit(45),
+          supabase
+            .from("videos")
+            .select("title")
+            .in("visibility", ["public", "unlisted"])
+            .ilike("title", `${q}%`)
+            .order("created_at", { ascending: false })
+            .limit(25),
+          supabase
+            .from("users")
+            .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
+            .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
+            .order("subscribers_count", { ascending: false })
+            .limit(10),
+        ]);
+
+        const titleSet = new Set<string>();
+        for (const row of [...(titlesMatch ?? []), ...(titlesPrefix ?? [])]) {
+          const t = String((row as { title?: string }).title ?? "").trim();
+          if (t.length >= 2) titleSet.add(t);
         }
-
-        const byId = new Map<string, VideoRowRaw>();
-        for (const v of [...videos, ...videos2]) byId.set(String(v.id), v);
-
-        const videoIds = Array.from(byId.keys());
-        const { data: users } = videoIds.length
-          ? await supabase
-              .from("users")
-              .select("id,channel_name,channel_handle,avatar_url")
-              .in("id", videoIds)
-          : { data: [] };
-
-        const usersMap = new Map<string, UserRowRaw>(
-          ((users ?? []) as unknown as UserRowRaw[]).map((u) => [String(u.id), u]),
-        );
-
-        const scoredVideos: SuggestionVideo[] = Array.from(byId.entries()).map(([id, v]) => {
-          const title = String(v.title ?? "");
-          const description = String(v.description ?? "");
-          const tags = Array.isArray(v.tags) ? (v.tags as string[]) : [];
-          const channel = usersMap.get(String(v.user_id));
-          const chName = channel?.channel_name ?? "";
-          const chHandle = channel?.channel_handle ?? "";
-
-          const titleScore = matchStrength(q, title);
-          const descScore = matchStrength(q, description) * 0.42;
-          const tagScore = tags.reduce((acc, tag) => acc + matchStrength(q, String(tag ?? "")) * 0.55, 0);
-          const hay = `${title} ${description} ${tags.join(" ")}`;
-          const tokenBonus = tokenHitsInText(hay, tokens) * 15;
-          const channelBonus =
-            Math.max(matchStrength(q, chName), channelHandleBoost(q, chHandle) * 0.45) + tokenHitsInText(`${chName} ${chHandle}`, tokens) * 8;
-
-          const baseScore =
-            titleScore * 1.15 +
-            descScore +
-            tagScore +
-            tokenBonus +
-            channelBonus +
-            recencyBoost(v.created_at) +
-            viewsSoftBoost(v.views as number) +
-            likeBoost(String(v.id)) +
-            watchBoost(String(v.id));
-
-          return {
-            type: "video" as const,
-            id,
-            title,
-            thumbnail_url: (v.thumbnail_url as string) ?? null,
-            views: (v.views as number) ?? null,
-            channel_name: channel?.channel_name ?? null,
-            channel_handle: channel?.channel_handle ?? null,
-            matchScore: baseScore,
-          };
-        });
-
-        scoredVideos.sort((a, b) => b.matchScore - a.matchScore);
-        const topVideos = scoredVideos.slice(0, 8);
-
-        const { data: channelsRaw } = await supabase
-          .from("users")
-          .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
-          .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
-          .order("subscribers_count", { ascending: false })
-          .limit(8);
+        const titleSamples = [...titleSet];
 
         const channels = (channelsRaw ?? []) as UserRowRaw[];
         const scoredChannels: SuggestionChannel[] = channels.map((ch) => {
@@ -320,14 +190,13 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
         scoredChannels.sort((a, b) => b.matchScore - a.matchScore);
 
         if (fetchId !== activeFetchId.current) return;
-        const merged = [...topVideos, ...scoredChannels].slice(0, 10);
-        setSuggestions(merged);
-        setPhraseHints(buildPhraseHints(q, getSearchHistory(), topVideos, scoredChannels));
+        setSuggestions(scoredChannels);
+        setPhraseHints(buildPhraseHints(q, getSearchHistory(), titleSamples, scoredChannels));
         setIsOpen(true);
       } catch {
         if (fetchId !== activeFetchId.current) return;
         setSuggestions([]);
-        setPhraseHints([]);
+        setPhraseHints(buildPhraseHints(q, getSearchHistory(), [], []));
         setIsOpen(true);
       } finally {
         if (fetchId !== activeFetchId.current) return;
@@ -336,7 +205,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     }, 220);
 
     return () => window.clearTimeout(timeout);
-  }, [query, isAuthenticated, supabase]);
+  }, [query, supabase]);
 
   const submit = (q: string) => {
     const cleaned = q.trim();
@@ -348,17 +217,12 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     router.push(`/search?q=${encodeURIComponent(cleaned)}`);
   };
 
-  const onPick = (s: Suggestion) => {
+  const onPickChannel = (s: SuggestionChannel) => {
     const typed = query.trim();
     if (typed.length >= 2) pushSearchHistory(typed);
     refreshHistory();
     setIsOpen(false);
     onClose?.();
-    if (s.type === "video") {
-      router.push(`/watch/${s.id}`);
-      return;
-    }
-
     if (s.channel_handle) router.push(`/@${s.channel_handle}`);
     else router.push("/");
   };
@@ -426,7 +290,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
           {s.channel_name}
         </div>
         <div className={clsx("line-clamp-1 text-slate-400", compact ? "text-[11px]" : "text-xs")}>
-          {s.channel_handle ? `@${s.channel_handle}` : ""}
+          {s.channel_handle ? `@${s.channel_handle}` : "Канал"}
         </div>
       </div>
     </button>
@@ -437,7 +301,7 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       <div className={clsx("mb-2 space-y-1.5", compact && "px-0.5")}>
         <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
           <Sparkles className="h-3 w-3 shrink-0 text-cyan-300/70" />
-          Подсказки
+          Похожие запросы
         </div>
         <div className="flex flex-wrap gap-1.5">
           {phraseHints.map((hint) => (
@@ -457,54 +321,37 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
 
   const suggestionsList = (compact: boolean) => (
     <div className="space-y-1">
-      {suggestions.map((s) => {
-        if (s.type === "video") {
-          return (
-            <button
-              key={`v-${s.id}`}
-              type="button"
-              className={clsx(
-                "flex w-full items-center rounded-xl border border-white/10 bg-white/[0.02] text-left transition hover:bg-white/[0.06] active:bg-white/[0.08]",
-                compact ? "gap-2 px-3 py-2" : "gap-3 px-3 py-3",
-              )}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onPick(s)}
-            >
-              <Video className={clsx("shrink-0 text-cyan-200/80", compact ? "h-4 w-4" : "h-5 w-5")} />
-              <div className="min-w-0 flex-1">
-                <div className={clsx("line-clamp-2 font-medium text-slate-100", compact ? "line-clamp-1 text-xs" : "text-sm")}>
-                  {s.title}
-                </div>
-                <div className={clsx("line-clamp-1 text-slate-400", compact ? "text-[11px]" : "text-xs")}>
-                  {s.channel_name ?? "Канал"}
-                </div>
-              </div>
-            </button>
-          );
-        }
-        return channelRow(s, compact, () => onPick(s));
-      })}
+      {suggestions.map((s) => channelRow(s, compact, () => onPickChannel(s)))}
     </div>
+  );
+
+  const searchSubmitButton = (compact: boolean) => (
+    <button
+      type="button"
+      className={clsx(
+        "w-full rounded-xl border border-white/10 bg-white/[0.03] text-left text-slate-200 transition hover:bg-white/[0.06]",
+        compact ? "px-3 py-2.5 text-xs" : "px-3 py-3 text-sm",
+      )}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        submit(query);
+      }}
+    >
+      Искать: <span className="text-cyan-200">{trimmed}</span>
+    </button>
   );
 
   const overlayTypedBlock =
     trimmed.length >= minChars && !isLoading ? (
       <div className="px-1">
         {hintsStrip(false)}
-        {suggestions.length === 0 ? (
-          <button
-            type="button"
-            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              submit(query);
-            }}
-          >
-            Нет подсказок. Искать: <span className="text-cyan-200">{trimmed}</span>
-          </button>
-        ) : (
-          suggestionsList(false)
-        )}
+        {suggestions.length > 0 ? (
+          <div className="mt-1 space-y-1.5">
+            <p className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">Каналы</p>
+            {suggestionsList(false)}
+          </div>
+        ) : null}
+        <div className={clsx(suggestions.length > 0 || phraseHints.length > 0 ? "mt-2" : "")}>{searchSubmitButton(false)}</div>
       </div>
     ) : null;
 
@@ -518,12 +365,12 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
     </p>
   ) : showEmptyHint ? (
     <p className="px-3 py-6 text-center text-sm text-slate-500">
-      Недавние запросы появятся после поиска. Начните вводить — покажем видео и каналы.
+      Недавние запросы появятся после поиска. Начните вводить — покажем каналы и подсказки.
     </p>
   ) : trimmed.length >= minChars ? (
     overlayTypedBlock
   ) : (
-    <p className="px-3 py-6 text-center text-sm text-slate-500">Начните вводить запрос — покажем видео и каналы.</p>
+    <p className="px-3 py-6 text-center text-sm text-slate-500">Начните вводить запрос — покажем каналы и дополнения.</p>
   );
 
   const compactDropdownInner = () => {
@@ -549,20 +396,15 @@ export function SmartSearch({ variant = "compact", onClose, leading }: SmartSear
       return (
         <div className="space-y-1 p-1">
           {hintsStrip(true)}
-          {suggestions.length === 0 ? (
-            <button
-              type="button"
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-xs text-slate-200 transition hover:bg-white/[0.06]"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                submit(query);
-              }}
-            >
-              Нет результатов. Искать: <span className="text-cyan-200">{trimmed}</span>
-            </button>
-          ) : (
-            suggestionsList(true)
-          )}
+          {suggestions.length > 0 ? (
+            <div className="space-y-1">
+              <p className="px-0.5 pt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">Каналы</p>
+              {suggestionsList(true)}
+            </div>
+          ) : null}
+          <div className={clsx(phraseHints.length > 0 || suggestions.length > 0 ? "pt-1" : "")}>
+            {searchSubmitButton(true)}
+          </div>
         </div>
       );
     }
