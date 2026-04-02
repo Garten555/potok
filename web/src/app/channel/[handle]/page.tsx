@@ -34,7 +34,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   const { data: user, error } = await supabase
     .from("users")
     .select(
-      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all",
+      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all, account_frozen_at",
     )
     .ilike("channel_handle", handle)
     .maybeSingle();
@@ -44,6 +44,10 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   }
 
   const isOwner = viewer?.id === user.id;
+  const channelFrozen = Boolean((user as { account_frozen_at?: string | null }).account_frozen_at);
+  if (channelFrozen && !isOwner) {
+    notFound();
+  }
 
   let videosCountQuery = supabase
     .from("videos")

@@ -95,6 +95,26 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
           .limit(80);
         loadedVideos = (fallbackVideos as HomeVideoItem[]) ?? [];
       }
+
+      const authorIds = Array.from(new Set(loadedVideos.map((v) => v.user_id).filter(Boolean)));
+      if (authorIds.length > 0) {
+        try {
+          const { data: frozenAuthors, error: frozenErr } = await supabase
+            .from("users")
+            .select("id")
+            .in("id", authorIds)
+            .not("account_frozen_at", "is", null);
+          if (!frozenErr && frozenAuthors) {
+            const frozenSet = new Set((frozenAuthors as { id: string }[]).map((r) => String(r.id)));
+            if (frozenSet.size > 0) {
+              loadedVideos = loadedVideos.filter((v) => !frozenSet.has(v.user_id));
+            }
+          }
+        } catch {
+          /* миграция без колонки — пропускаем фильтр */
+        }
+      }
+
       setVideos(loadedVideos);
 
       const vids = loadedVideos.map((v) => v.id);

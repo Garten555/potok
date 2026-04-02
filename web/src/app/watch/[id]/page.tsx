@@ -59,6 +59,14 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
   const isOwner = viewer?.id === video.user_id;
   if (video.visibility === "private" && !isOwner) notFound();
 
+  const { data: ownerRow } = await supabase
+    .from("users")
+    .select("account_frozen_at")
+    .eq("id", video.user_id)
+    .maybeSingle();
+  const ownerFrozen = Boolean((ownerRow as { account_frozen_at?: string | null } | null)?.account_frozen_at);
+  if (ownerFrozen && !isOwner) notFound();
+
   // Считаем просмотр максимум 1 раз на пользователя.
   if (viewer?.id) {
     try {

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, CirclePlus, Gavel, Grid2x2, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
+import { Bell, CirclePlus, Gavel, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
@@ -170,12 +170,12 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex shrink-0 items-center">
+        <Link href="/" className="flex shrink-0 items-center outline-none ring-cyan-500/40 focus-visible:ring-2" aria-label="На главную">
           <div
             className="h-8 w-[4.25rem] bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat sm:h-9 sm:w-28 md:h-10 md:w-32 lg:h-11 lg:w-36"
-            aria-label="Логотип POTOK"
+            aria-hidden
           />
-        </div>
+        </Link>
 
         <div className="hidden min-w-0 flex-1 justify-center px-0.5 sm:px-2 lg:flex">
           <div className="w-full max-w-2xl min-w-0">
@@ -229,13 +229,6 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
             >
               <CirclePlus className="h-4 w-4" />
             </Link>
-            <button
-              type="button"
-              className="hidden h-9 w-9 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10 sm:grid"
-              aria-label="Приложения"
-            >
-              <Grid2x2 className="h-4 w-4" />
-            </button>
             <div className="relative" ref={notificationsRef}>
               <button
                 type="button"

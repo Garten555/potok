@@ -9,7 +9,6 @@ import {
   Menu,
   ListVideo,
   Clock,
-  PlayCircle,
   Radio,
   Tv,
   Settings,
@@ -30,7 +29,6 @@ const guestNavItems = [
 const authNavItems = [
   { label: "Главная", icon: Radio, href: "/" },
   { label: "Подписки", icon: Tv, href: "/?tab=subscriptions" },
-  { label: "Для вас", icon: PlayCircle, href: "/?tab=for-you" },
   { label: "История", icon: Clock, href: "/?tab=history" },
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
   { label: "Ваши видео", icon: ListVideo, href: "/studio?tab=content" },

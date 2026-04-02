@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { SidebarStateProvider } from "@/components/layout/sidebar-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { AuthStateProvider } from "@/components/auth/auth-context";
+import { FrozenAccountGate } from "@/components/layout/frozen-account-gate";
 
 const SIDEBAR_STORAGE_KEY = "potok-sidebar-open";
 
@@ -106,6 +107,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="min-h-screen w-full max-w-full min-w-0 bg-[#0a0e18] text-slate-100">
       <AuthStateProvider value={{ isAuthenticated }}>
         <SidebarStateProvider value={{ isOpen, toggleSidebar }}>
+          <FrozenAccountGate isAuthenticated={isAuthenticated}>
           {isStudioRoute ? (
             <main className="min-h-screen w-full min-w-0 max-w-full flex-1 bg-gradient-to-b from-[#141a2a] via-[#111726] to-[#0e1422] transition-all">
               {children}
@@ -139,6 +141,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
             </>
           )}
+          </FrozenAccountGate>
         </SidebarStateProvider>
       </AuthStateProvider>
     </div>

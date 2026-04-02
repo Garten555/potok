@@ -7,6 +7,8 @@ import { ExternalLink, KeyRound, Trash2, Video, UserCog, Wrench } from "lucide-r
 import { clearSearchHistory } from "@/lib/search-history";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { AccountFreezeSection } from "@/components/settings/account-freeze-section";
+import { MfaSettingsSection } from "@/components/settings/mfa-settings-section";
 
 export function SettingsContent() {
   const { isAuthenticated } = useAuthState();
@@ -18,7 +20,13 @@ export function SettingsContent() {
         <p className="mt-1 text-sm text-slate-400">Аккаунт, поиск и быстрые ссылки.</p>
       </div>
 
-      {isAuthenticated ? <AccountSecuritySection /> : null}
+      {isAuthenticated ? (
+        <>
+          <AccountSecuritySection />
+          <MfaSettingsSection />
+          <AccountFreezeSection />
+        </>
+      ) : null}
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -90,6 +98,7 @@ export function SettingsContent() {
 function AccountSecuritySection() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [email, setEmail] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -105,8 +114,16 @@ function AccountSecuritySection() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
+    if (!email) {
+      setFeedback({ kind: "err", text: "Не удалось определить email." });
+      return;
+    }
+    if (currentPassword.length < 1) {
+      setFeedback({ kind: "err", text: "Введите текущий пароль." });
+      return;
+    }
     if (password.length < 8) {
-      setFeedback({ kind: "err", text: "Пароль не короче 8 символов." });
+      setFeedback({ kind: "err", text: "Новый пароль не короче 8 символов." });
       return;
     }
     if (password.length > 128) {
@@ -114,10 +131,25 @@ function AccountSecuritySection() {
       return;
     }
     if (password !== confirm) {
-      setFeedback({ kind: "err", text: "Пароли не совпадают." });
+      setFeedback({ kind: "err", text: "Новые пароли не совпадают." });
       return;
     }
     setBusy(true);
+    const { error: authErr } = await supabase.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+    if (authErr) {
+      setBusy(false);
+      setFeedback({
+        kind: "err",
+        text:
+          authErr.message.includes("Invalid login") || authErr.message.includes("credentials")
+            ? "Неверный текущий пароль."
+            : authErr.message,
+      });
+      return;
+    }
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
     if (error) {
@@ -125,6 +157,7 @@ function AccountSecuritySection() {
       return;
     }
     setFeedback({ kind: "ok", text: "Пароль обновлён. Используйте его при следующем входе." });
+    setCurrentPassword("");
     setPassword("");
     setConfirm("");
   };
@@ -143,6 +176,20 @@ function AccountSecuritySection() {
         <p className="mt-2 text-sm text-slate-500">Загружаем профиль…</p>
       )}
       <form onSubmit={onSubmit} className="mt-4 space-y-3">
+        <div>
+          <label htmlFor="settings-current-password" className="text-xs text-slate-400">
+            Текущий пароль
+          </label>
+          <input
+            id="settings-current-password"
+            type={showPw ? "text" : "password"}
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2"
+            placeholder="Для смены пароля обязателен"
+          />
+        </div>
         <div>
           <label htmlFor="settings-new-password" className="text-xs text-slate-400">
             Новый пароль
