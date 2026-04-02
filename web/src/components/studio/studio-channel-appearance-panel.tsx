@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelHomeLayoutEditor } from "@/components/channel/channel-home-layout-editor";
 import { ChannelIdentityForm } from "@/components/studio/channel-identity-form";
@@ -210,17 +211,28 @@ export function StudioChannelAppearancePanel() {
       <div className="space-y-3">
         <h2 className="text-base font-semibold tracking-tight text-slate-100">Аватар и шапка</h2>
         <p className="text-sm text-slate-500">
-          Как на странице канала: одна кнопка на шапке — открывает редактор. После сохранения страница
-          перезагрузится.
+          Как на странице канала: кнопка на шапке открывает редактор. Ниже — текущий аватар. После
+          сохранения страница перезагрузится.
         </p>
-        <ChannelBannerStrip bannerUrl={bannerUrl}>
-          <ChannelBrandingControls
-            userId={userId}
-            channelName={channelName}
-            initialAvatarUrl={avatarUrl}
-            initialBannerUrl={bannerUrl}
-          />
-        </ChannelBannerStrip>
+        <div className="overflow-hidden rounded-xl border border-white/10">
+          <ChannelBannerStrip bannerUrl={bannerUrl} className="border-0">
+            <ChannelBrandingControls
+              userId={userId}
+              channelName={channelName}
+              initialAvatarUrl={avatarUrl}
+              initialBannerUrl={bannerUrl}
+            />
+          </ChannelBannerStrip>
+          <div className="flex items-center gap-4 border-t border-white/10 bg-[#0c1120] px-4 py-4 sm:px-5">
+            <ChannelAvatar channelName={channelName} avatarUrl={avatarUrl} variant="channel" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-200">{channelName}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Аватар обновится после сохранения в окне редактора.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">
