@@ -35,6 +35,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   /** Сервер уже знает сессию (viewerId); клиентский getUser иногда отстаёт — не прячем форму. */
   const [isAuth, setIsAuth] = useState(() => Boolean(viewerId));
   const pusher = useMemo(() => createPusherClient(), []);
@@ -44,13 +45,46 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
 
   const loadComments = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
+    // user_id FK points at auth.users, not public.users — embedding users!… often fails in PostgREST.
+    const { data: rows, error: commentsErr } = await supabase
       .from("comments")
-      .select("id, content, created_at, user_id, parent_id, users!comments_user_id_fkey(channel_name, avatar_url)")
+      .select("id, content, created_at, user_id, parent_id")
       .eq("video_id", videoId)
       .order("created_at", { ascending: false })
       .limit(500);
-    setComments((data as CommentRow[]) ?? []);
+
+    if (commentsErr) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[comments] load failed", commentsErr);
+      }
+      setLoadError("Не удалось загрузить комментарии.");
+      setComments([]);
+    } else {
+      setLoadError("");
+      const list = rows ?? [];
+      const userIds = [...new Set(list.map((c) => c.user_id).filter(Boolean))];
+      const userMap = new Map<string, { channel_name?: string | null; avatar_url?: string | null }>();
+      if (userIds.length > 0) {
+        const { data: userRows, error: usersErr } = await supabase
+          .from("users")
+          .select("id, channel_name, avatar_url")
+          .in("id", userIds);
+        if (!usersErr && userRows) {
+          for (const u of userRows as {
+            id: string;
+            channel_name?: string | null;
+            avatar_url?: string | null;
+          }[]) {
+            userMap.set(u.id, u);
+          }
+        }
+      }
+      const merged: CommentRow[] = list.map((c) => ({
+        ...(c as CommentRow),
+        users: userMap.get(c.user_id) ?? null,
+      }));
+      setComments(merged);
+    }
 
     const { data: heartRows, error: heartErr } = await supabase
       .from("comment_author_hearts")
@@ -325,10 +359,11 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
         <p className="mt-3 text-sm text-slate-400">Войдите, чтобы оставить комментарий.</p>
       )}
 
+      {loadError ? <p className="mt-4 text-sm text-rose-300">{loadError}</p> : null}
       <div className="mt-4 space-y-3">
         {grouped.roots.length > 0 ? (
           grouped.roots.map((item) => renderComment(item, 0))
-        ) : (
+        ) : loadError ? null : (
           <p className="text-sm text-slate-400">Пока нет комментариев. Будьте первым.</p>
         )}
       </div>
