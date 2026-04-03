@@ -2,8 +2,8 @@
 
 import clsx from "clsx";
 import {
-  ExternalLink,
   Flag,
+  Home,
   LayoutDashboard,
   Menu,
   Settings,
@@ -55,8 +55,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
         <Link
           href="/"
-          className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-cyan-200/90"
+          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-1.5 text-xs font-medium text-cyan-200/90"
         >
+          <Home className="h-3.5 w-3.5 shrink-0 opacity-90" />
           На сайт
         </Link>
       </header>
@@ -73,7 +74,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       <aside
         className={clsx(
-          "fixed left-0 top-0 z-40 flex h-full w-[min(18rem,92vw)] flex-col border-r border-amber-500/20 bg-gradient-to-b from-[#141008] via-[#0e0c12] to-[#08060a] shadow-[8px_0_40px_rgba(0,0,0,0.45)] transition-transform duration-300 lg:static lg:z-0 lg:w-56 lg:translate-x-0 lg:shadow-none xl:w-60",
+          "fixed left-0 top-0 z-40 flex max-h-screen w-[min(18rem,92vw)] flex-col overflow-y-auto border-r border-amber-500/20 bg-gradient-to-b from-[#141008] via-[#0e0c12] to-[#08060a] shadow-[8px_0_40px_rgba(0,0,0,0.45)] transition-transform duration-300 lg:static lg:z-0 lg:h-auto lg:max-h-none lg:w-56 lg:translate-x-0 lg:shadow-none xl:w-60",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -99,7 +100,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
 
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
+        <nav className="flex flex-col gap-0.5 px-2 py-3">
           {navItems.map(({ href, label, Icon }) => {
             const active =
               pathname === href ||
@@ -123,19 +124,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="border-t border-white/10 p-3">
+        <div className="mt-4 shrink-0 border-t border-white/10 p-3">
           <Link
             href="/"
-            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-400 transition hover:bg-white/5 hover:text-cyan-200"
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white"
           >
-            <ExternalLink className="h-4 w-4 shrink-0" />
-            На главную сайта
+            <Home className="h-[18px] w-[18px] shrink-0 text-slate-300" />
+            На сайт
           </Link>
           <Link
             href="/settings"
-            className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+            className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
           >
-            <Settings className="h-4 w-4 shrink-0" />
+            <Settings className="h-[18px] w-[18px] shrink-0" />
             Настройки аккаунта
           </Link>
         </div>
@@ -150,8 +151,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
+              className="flex items-center gap-2 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20"
             >
+              <Home className="h-[18px] w-[18px] shrink-0 opacity-90" />
               На сайт
             </Link>
           </div>

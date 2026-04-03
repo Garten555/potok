@@ -37,7 +37,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
         "fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] max-lg:pb-[env(safe-area-inset-bottom)] max-lg:pt-[env(safe-area-inset-top)]",
         "lg:z-auto lg:w-64 lg:min-w-[16rem] lg:max-w-none",
         "lg:translate-x-0",
-        "lg:sticky lg:top-0 lg:h-[min(100vh,100dvh)] lg:overflow-y-auto lg:self-start",
+        "max-h-screen overflow-y-auto lg:sticky lg:top-0 lg:self-start",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
       )}
     >
@@ -59,10 +59,10 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
 
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <Clapperboard className="h-[18px] w-[18px] shrink-0 text-cyan-200/90" aria-hidden />
-          <span className="truncate text-sm font-medium text-slate-200">Канал и контент</span>
+          <span className="truncate text-sm font-medium text-slate-200">Potok Studio</span>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pt-1 sm:gap-2">
+        <nav className="flex flex-col gap-1.5 pt-1 sm:gap-2">
           <button type="button" onClick={() => handleSelect("upload")} className={navBtnClass(activeNav === "upload")}>
             <UploadCloud className="h-[18px] w-[18px] shrink-0" />
             Загрузка видео
@@ -101,13 +101,13 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
           </button>
         </nav>
 
-        <div className="mt-auto border-t border-white/8 pt-3">
+        <div className="mt-4 shrink-0 border-t border-white/8 pt-3">
           <Link
             href="/"
             onClick={onMobileClose}
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white"
           >
-            <Home className="h-[18px] w-[18px] shrink-0" />
+            <Home className="h-[18px] w-[18px] shrink-0 text-slate-300" />
             На сайт
           </Link>
         </div>
