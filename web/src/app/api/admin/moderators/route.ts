@@ -11,12 +11,14 @@ export async function GET() {
   const { data, error } = await svc
     .from("users")
     .select("id, channel_name, channel_handle, role, created_at")
-    .eq("role", "moderator")
+    .in("role", ["moderator", "admin"])
+    .order("role", { ascending: true })
     .order("channel_name", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ moderators: data ?? [] });
+  const staff = data ?? [];
+  return NextResponse.json({ staff, moderators: staff.filter((r) => (r as { role?: string }).role === "moderator") });
 }

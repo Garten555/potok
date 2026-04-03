@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { BadgeCheck } from "lucide-react";
@@ -22,6 +22,8 @@ export function AdminUsersSection() {
   const [single, setSingle] = useState<{ user: UserRow | null; email?: string | null } | null>(null);
   const [list, setList] = useState<UserRow[] | null>(null);
   const [verifySaving, setVerifySaving] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<"all" | "user" | "moderator" | "admin">("all");
+  const [verifiedFilter, setVerifiedFilter] = useState<"all" | "yes" | "no">("all");
 
   const search = async () => {
     const term = q.trim();
@@ -92,6 +94,18 @@ export function AdminUsersSection() {
       setVerifySaving(false);
     }
   };
+
+  const filteredList = useMemo(() => {
+    if (!list) return null;
+    return list.filter((u) => {
+      const r = u.role ?? "user";
+      if (roleFilter !== "all" && r !== roleFilter) return false;
+      const v = Boolean(u.channel_verified);
+      if (verifiedFilter === "yes" && !v) return false;
+      if (verifiedFilter === "no" && v) return false;
+      return true;
+    });
+  }, [list, roleFilter, verifiedFilter]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -192,11 +206,43 @@ export function AdminUsersSection() {
       ) : null}
 
       {list ? (
-        <ul className="mt-8 space-y-2">
+        <div className="mt-8">
+          {list.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+              <div>
+                <label className="text-xs text-slate-500">Роль</label>
+                <select
+                  className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
+                >
+                  <option value="all">Все</option>
+                  <option value="user">user</option>
+                  <option value="moderator">moderator</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500">Верификация</label>
+                <select
+                  className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
+                  value={verifiedFilter}
+                  onChange={(e) => setVerifiedFilter(e.target.value as typeof verifiedFilter)}
+                >
+                  <option value="all">Все</option>
+                  <option value="yes">С галочкой</option>
+                  <option value="no">Без галочки</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
           {list.length === 0 ? (
             <p className="text-slate-500">Ничего не найдено.</p>
+          ) : filteredList?.length === 0 ? (
+            <p className="text-slate-500">Никто не подходит под фильтр роли или верификации.</p>
           ) : (
-            list.map((u) => (
+            <ul className="space-y-2">
+            {(filteredList ?? []).map((u) => (
               <li
                 key={u.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm"
@@ -217,9 +263,10 @@ export function AdminUsersSection() {
                   </Link>
                 ) : null}
               </li>
-            ))
+            ))}
+            </ul>
           )}
-        </ul>
+        </div>
       ) : null}
     </div>
   );

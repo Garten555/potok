@@ -4,11 +4,18 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isAdminRole } from "@/lib/user-role";
+import { AdminPlatformBars, AdminStatsCharts } from "@/components/admin/admin-stats-charts";
 
 type Stats = {
   reports_open: number;
   reports_reviewing: number;
   reports_last_7d: number;
+  reports_by_status?: {
+    open: number;
+    reviewing: number;
+    resolved: number;
+    dismissed: number;
+  };
   users_total: number;
   videos_total: number;
   verified_channels: number;
@@ -89,6 +96,17 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
         </div>
       ) : !err ? (
         <p className="mt-8 text-slate-500">Загрузка метрик…</p>
+      ) : null}
+
+      {stats?.reports_by_status ? (
+        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+          <AdminStatsCharts reportsByStatus={stats.reports_by_status} />
+          <AdminPlatformBars
+            users={stats.users_total}
+            videos={stats.videos_total}
+            verified={stats.verified_channels}
+          />
+        </div>
       ) : null}
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">

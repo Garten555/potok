@@ -9,9 +9,20 @@ export async function GET() {
 
   const svc = createSupabaseServiceClient();
 
-  const [openRes, reviewingRes, resolvedWeekRes, usersTotalRes, videosTotalRes, verifiedRes] = await Promise.all([
+  const [
+    openRes,
+    reviewingRes,
+    resolvedRes,
+    dismissedRes,
+    resolvedWeekRes,
+    usersTotalRes,
+    videosTotalRes,
+    verifiedRes,
+  ] = await Promise.all([
     svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "reviewing"),
+    svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "resolved"),
+    svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "dismissed"),
     svc
       .from("reports")
       .select("id", { count: "exact", head: true })
@@ -35,6 +46,12 @@ export async function GET() {
     reports_open: openRes.count ?? 0,
     reports_reviewing: reviewingRes.count ?? 0,
     reports_last_7d: resolvedWeekRes.count ?? 0,
+    reports_by_status: {
+      open: openRes.count ?? 0,
+      reviewing: reviewingRes.count ?? 0,
+      resolved: resolvedRes.count ?? 0,
+      dismissed: dismissedRes.count ?? 0,
+    },
     users_total: usersTotalRes.count ?? 0,
     videos_total: videosTotalRes.count ?? 0,
     verified_channels: verifiedRes.count ?? 0,

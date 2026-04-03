@@ -24,26 +24,41 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
   const [kindFilter, setKindFilter] = useState<"" | "video" | "comment" | "channel">("");
   const [statusFilter, setStatusFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(
+    async (channelOverride?: string) => {
     setLoading(true);
+    setFetchError(null);
     try {
       const params = new URLSearchParams();
+      const ch = (channelOverride !== undefined ? channelOverride : channelFilter).trim();
+      if (ch) params.set("channel", ch);
       if (kindFilter) params.set("target_type", kindFilter);
       if (statusFilter) params.set("status", statusFilter);
       if (reasonFilter) params.set("reason", reasonFilter);
       if (q.trim()) params.set("q", q.trim());
       const res = await fetch(`/api/moderation/reports?${params.toString()}`);
-      if (!res.ok) return;
-      const j = (await res.json()) as { reports?: ReportRow[] };
+      const j = (await res.json()) as { reports?: ReportRow[]; error?: string };
+      if (!res.ok) {
+        setReports([]);
+        setFetchError(j.error ?? `Ошибка ${res.status}`);
+        return;
+      }
       setReports(j.reports ?? []);
+    } catch {
+      setReports([]);
+      setFetchError("Сеть недоступна");
     } finally {
       setLoading(false);
     }
-  }, [kindFilter, statusFilter, reasonFilter, q]);
+  },
+    [kindFilter, statusFilter, reasonFilter, channelFilter, q],
+  );
 
   useEffect(() => {
     void loadReports();
@@ -115,9 +130,41 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Глобальная модерация сайта: видео, комментарии и каналы. Заметка при закрытии; бан по жалобе — только у
-        администраторов.
+        Глобальная модерация сайта: видео, комментарии и каналы. Чтобы смотреть все жалобы, связанные с конкретным каналом,
+        укажите UUID владельца канала или @handle — подтянутся жалобы на канал, на его ролики и на комментарии под ними.
+        Заметка при закрытии; бан по жалобе — только у администраторов.
       </p>
+
+      <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
+        <label className="text-xs font-medium uppercase tracking-wide text-cyan-200/85">Фильтр по каналу</label>
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <input
+            className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 font-mono text-sm text-slate-100"
+            value={channelFilter}
+            onChange={(e) => setChannelFilter(e.target.value)}
+            placeholder="UUID владельца или @handle канала"
+          />
+          <button
+            type="button"
+            className="rounded-lg border border-cyan-400/35 bg-cyan-500/20 px-3 py-2 text-sm text-cyan-100"
+            onClick={() => void loadReports()}
+          >
+            Показать
+          </button>
+          {channelFilter.trim() ? (
+            <button
+              type="button"
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-400 hover:bg-white/5"
+              onClick={() => {
+                setChannelFilter("");
+                void loadReports("");
+              }}
+            >
+              Сбросить канал
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
         {kindTabs.map((tab) => (
@@ -194,6 +241,8 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
           onChange={(e) => setNote(e.target.value)}
         />
       </div>
+
+      {fetchError ? <p className="mt-6 text-sm text-rose-300/90">{fetchError}</p> : null}
 
       {loading ? (
         <p className="mt-8 text-slate-400">Загрузка...</p>
