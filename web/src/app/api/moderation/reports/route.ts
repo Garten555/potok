@@ -1,24 +1,10 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-
-async function requireStaff() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: NextResponse.json({ error: "Требуется вход" }, { status: 401 }) };
-  const { data: row } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle();
-  const role = (row as { role?: string } | null)?.role;
-  if (role !== "moderator" && role !== "admin") {
-    return { error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }) };
-  }
-  return { user, role };
-}
 
 export async function GET(req: Request) {
   const gate = await requireStaff();
-  if ("error" in gate && gate.error) return gate.error;
+  if (gate instanceof NextResponse) return gate;
   const viewerRole = gate.role ?? null;
 
   const url = new URL(req.url);

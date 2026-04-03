@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, CirclePlus, Gavel, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
+import { Bell, CirclePlus, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -266,23 +266,24 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
 
         {isAuthenticated ? (
           <div className="flex shrink-0 items-center justify-end gap-2">
-            {profile?.role === "admin" ? (
+            {profile?.role === "admin" || profile?.role === "moderator" ? (
               <Link
                 href="/admin"
-                className="hidden h-9 w-9 place-items-center rounded-full border border-amber-400/35 bg-amber-500/10 text-slate-300 transition hover:bg-amber-500/20 sm:grid"
-                aria-label="Админ-панель"
-                title="Админ-панель"
+                className={clsx(
+                  "hidden h-9 w-9 place-items-center rounded-full border text-slate-300 transition sm:grid",
+                  profile?.role === "admin"
+                    ? "border-amber-400/35 bg-amber-500/10 hover:bg-amber-500/20"
+                    : "border-cyan-400/25 bg-cyan-500/10 hover:bg-cyan-500/20",
+                )}
+                aria-label="Панель персонала"
+                title="Панель персонала"
               >
-                <Shield className="h-4 w-4 text-amber-200" />
-              </Link>
-            ) : profile?.role === "moderator" ? (
-              <Link
-                href="/admin"
-                className="hidden h-9 w-9 place-items-center rounded-full border border-cyan-400/25 bg-cyan-500/10 text-slate-300 transition hover:bg-cyan-500/20 sm:grid"
-                aria-label="Модерация"
-                title="Модерация"
-              >
-                <Gavel className="h-4 w-4 text-cyan-200" />
+                <Shield
+                  className={clsx(
+                    "h-4 w-4",
+                    profile?.role === "admin" ? "text-amber-200" : "text-cyan-200",
+                  )}
+                />
               </Link>
             ) : null}
             <Link
