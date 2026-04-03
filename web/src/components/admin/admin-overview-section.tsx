@@ -102,12 +102,20 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Администрирование</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-300">
             {admin ? (
-              <li>
-                →{" "}
-                <Link href="/admin/unfreeze" className="text-amber-200/90 hover:underline">
-                  Заявки на разморозку аккаунтов
-                </Link>
-              </li>
+              <>
+                <li>
+                  →{" "}
+                  <Link href="/admin/unfreeze" className="text-amber-200/90 hover:underline">
+                    Заявки на разморозку аккаунтов
+                  </Link>
+                </li>
+                <li>
+                  →{" "}
+                  <Link href="/admin/team" className="text-amber-200/90 hover:underline">
+                    Назначить модераторов
+                  </Link>
+                </li>
+              </>
             ) : (
               <li className="text-slate-500">Расширенные действия (разморозка, бан по жалобе) — у администратора.</li>
             )}

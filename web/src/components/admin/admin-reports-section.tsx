@@ -21,6 +21,7 @@ export type ReportRow = {
 export function AdminReportsSection({ viewerRole }: { viewerRole: string | null }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [reports, setReports] = useState<ReportRow[]>([]);
+  const [kindFilter, setKindFilter] = useState<"" | "video" | "comment" | "channel">("");
   const [statusFilter, setStatusFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
   const [q, setQ] = useState("");
@@ -31,6 +32,7 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (kindFilter) params.set("target_type", kindFilter);
       if (statusFilter) params.set("status", statusFilter);
       if (reasonFilter) params.set("reason", reasonFilter);
       if (q.trim()) params.set("q", q.trim());
@@ -41,7 +43,7 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, reasonFilter, q]);
+  }, [kindFilter, statusFilter, reasonFilter, q]);
 
   useEffect(() => {
     void loadReports();
@@ -99,13 +101,41 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
   const filteredReasons = useMemo(() => REPORT_REASON_CODES, []);
   const isAdmin = viewerRole === "admin";
 
+  const kindTabs: { id: typeof kindFilter; label: string }[] = [
+    { id: "", label: "Все" },
+    { id: "video", label: "Видео" },
+    { id: "comment", label: "Комментарии" },
+    { id: "channel", label: "Сообщество (канал)" },
+  ];
+
+  const targetLabel = (t: string) =>
+    t === "video" ? "Видео" : t === "comment" ? "Комментарий" : t === "channel" ? "Канал" : t;
+
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Очередь жалоб: фильтры, заметка при закрытии, удаление комментария и скрытие видео. Бан по жалобе — только у
+        Глобальная модерация сайта: видео, комментарии и каналы. Заметка при закрытии; бан по жалобе — только у
         администраторов.
       </p>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {kindTabs.map((tab) => (
+          <button
+            key={tab.id || "all"}
+            type="button"
+            onClick={() => setKindFilter(tab.id)}
+            className={clsx(
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+              kindFilter === tab.id
+                ? "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/35"
+                : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <div className="mt-6 flex flex-wrap items-end gap-3">
         <div>
@@ -178,7 +208,8 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
                 <div>
                   <span className="text-xs text-slate-500">{new Date(r.created_at).toLocaleString("ru-RU")}</span>
                   <p className="mt-1 font-medium text-slate-100">
-                    {r.target_type} · <span className="text-cyan-200/90">{r.target_id}</span>
+                    <span className="text-slate-400">{targetLabel(r.target_type)}</span> ·{" "}
+                    <span className="font-mono text-cyan-200/90">{r.target_id}</span>
                   </p>
                   <p className="text-xs text-slate-400">
                     Причина: {reportReasonLabel(r.reason_code)} ({r.status})

@@ -10,6 +10,7 @@ import {
   Shield,
   Unlock,
   UserSearch,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -32,6 +33,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     { href: "/admin/overview", label: "Обзор", Icon: LayoutDashboard },
     { href: "/admin/reports", label: "Жалобы", Icon: Flag },
     ...(admin ? [{ href: "/admin/unfreeze", label: "Разморозка", Icon: Unlock }] : []),
+    ...(admin ? [{ href: "/admin/team", label: "Модераторы", Icon: Users }] : []),
     { href: "/admin/users", label: "Пользователи", Icon: UserSearch },
   ];
 

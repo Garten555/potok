@@ -10,6 +10,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") ?? "";
   const reason = url.searchParams.get("reason") ?? "";
+  const targetType = url.searchParams.get("target_type") ?? "";
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
   const svc = createSupabaseServiceClient();
@@ -20,6 +21,9 @@ export async function GET(req: Request) {
   }
   if (reason) {
     query = query.eq("reason_code", reason);
+  }
+  if (targetType && ["video", "comment", "channel"].includes(targetType)) {
+    query = query.eq("target_type", targetType);
   }
 
   const { data: rows, error } = await query;

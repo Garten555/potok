@@ -7,12 +7,12 @@ import {
   Flame,
   LogIn,
   Menu,
-  ListVideo,
   Clock,
   Radio,
   Tv,
   Settings,
   ThumbsUp,
+  Video,
 } from "lucide-react";
 
 type SidebarProps = {
@@ -31,7 +31,7 @@ const authNavItems = [
   { label: "Подписки", icon: Tv, href: "/?tab=subscriptions" },
   { label: "История", icon: Clock, href: "/?tab=history" },
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
-  { label: "Ваши видео", icon: ListVideo, href: "/studio?tab=content" },
+  { label: "Ваши видео", icon: Video, href: "/studio?tab=content" },
 ];
 
 export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {

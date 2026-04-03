@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, CirclePlus, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
+import { Bell, Clapperboard, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -285,34 +285,6 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
 
         {isAuthenticated ? (
           <div className="flex shrink-0 items-center justify-end gap-2">
-            {isStaffRole(profile?.role) ? (
-              <Link
-                href="/admin/overview"
-                className={clsx(
-                  "hidden h-9 w-9 place-items-center rounded-full border text-slate-300 transition sm:grid",
-                  isAdminRole(profile?.role)
-                    ? "border-amber-400/35 bg-amber-500/10 hover:bg-amber-500/20"
-                    : "border-cyan-400/25 bg-cyan-500/10 hover:bg-cyan-500/20",
-                )}
-                aria-label="Панель персонала"
-                title="Панель персонала"
-              >
-                <Shield
-                  className={clsx(
-                    "h-4 w-4",
-                    isAdminRole(profile?.role) ? "text-amber-200" : "text-cyan-200",
-                  )}
-                />
-              </Link>
-            ) : null}
-            <Link
-              href="/studio?tab=upload"
-              className="hidden h-9 w-9 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10 sm:grid"
-              aria-label="Открыть студию"
-              title="Открыть студию"
-            >
-              <CirclePlus className="h-4 w-4" />
-            </Link>
             <button
               ref={notificationsTriggerRef}
               type="button"
@@ -439,7 +411,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                     className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <CirclePlus className="h-4 w-4 text-cyan-200" />
+                    <Clapperboard className="h-4 w-4 text-cyan-200" />
                     Студия
                   </Link>
                   {isStaffRole(profile?.role) ? (
