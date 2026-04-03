@@ -23,6 +23,8 @@ export function AppShell({ children }: AppShellProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const pathname = usePathname();
   const isStudioRoute = pathname.startsWith("/studio");
+  const isAdminRoute = pathname.startsWith("/admin");
+  const isFullBleedChrome = isStudioRoute || isAdminRoute;
 
   useEffect(() => {
     const mq = window.matchMedia(DESKTOP);
@@ -108,7 +110,7 @@ export function AppShell({ children }: AppShellProps) {
       <AuthStateProvider value={{ isAuthenticated }}>
         <SidebarStateProvider value={{ isOpen, toggleSidebar }}>
           <FrozenAccountGate isAuthenticated={isAuthenticated}>
-          {isStudioRoute ? (
+          {isFullBleedChrome ? (
             <main className="min-h-screen w-full min-w-0 max-w-full flex-1 bg-gradient-to-b from-[#141a2a] via-[#111726] to-[#0e1422] transition-all">
               {children}
             </main>

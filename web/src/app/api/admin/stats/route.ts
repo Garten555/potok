@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+import { requireStaff } from "@/lib/server/staff-auth";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+
+/** Сводка для дашборда админки (модератор + админ). */
+export async function GET() {
+  const gate = await requireStaff();
+  if (gate instanceof NextResponse) return gate;
+
+  const svc = createSupabaseServiceClient();
+
+  const [openRes, reviewingRes, resolvedWeekRes] = await Promise.all([
+    svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+    svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "reviewing"),
+    svc
+      .from("reports")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+  ]);
+
+  let pendingUnfreeze: number | null = null;
+  if (gate.role === "admin") {
+    const u = await svc
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("unfreeze_request_status", "pending")
+      .not("account_frozen_at", "is", null);
+    pendingUnfreeze = u.count ?? 0;
+  }
+
+  return NextResponse.json({
+    reports_open: openRes.count ?? 0,
+    reports_reviewing: reviewingRes.count ?? 0,
+    reports_last_7d: resolvedWeekRes.count ?? 0,
+    pending_unfreeze: pendingUnfreeze,
+    viewerRole: gate.role,
+  });
+}

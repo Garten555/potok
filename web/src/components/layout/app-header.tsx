@@ -287,7 +287,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
           <div className="flex shrink-0 items-center justify-end gap-2">
             {isStaffRole(profile?.role) ? (
               <Link
-                href="/admin"
+                href="/admin/overview"
                 className={clsx(
                   "hidden h-9 w-9 place-items-center rounded-full border text-slate-300 transition sm:grid",
                   isAdminRole(profile?.role)
@@ -444,7 +444,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                   </Link>
                   {isStaffRole(profile?.role) ? (
                     <Link
-                      href="/admin"
+                      href="/admin/overview"
                       className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
                       onClick={() => setIsMenuOpen(false)}
                     >

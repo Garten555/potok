@@ -260,7 +260,7 @@ export function ChannelStats({
       <h2 className="text-sm font-semibold text-slate-100">Статистика канала</h2>
       <p className="mt-1 text-xs text-slate-500">
         Сводка по вашему каналу. Глобальная модерация — у ролей admin/moderator в{" "}
-        <span className="text-slate-400">/admin</span>.
+        <span className="text-slate-400">/admin/overview</span>.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0b1120]/60 p-3">
