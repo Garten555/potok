@@ -423,6 +423,21 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                     <CirclePlus className="h-4 w-4 text-cyan-200" />
                     Студия
                   </Link>
+                  {profile?.role === "admin" || profile?.role === "moderator" ? (
+                    <Link
+                      href="/admin"
+                      className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Shield
+                        className={clsx(
+                          "h-4 w-4",
+                          profile?.role === "admin" ? "text-amber-200" : "text-cyan-200",
+                        )}
+                      />
+                      Панель персонала
+                    </Link>
+                  ) : null}
                   <Link
                     href="/settings"
                     className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
