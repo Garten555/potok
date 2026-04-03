@@ -21,11 +21,13 @@ type PlaylistItem = {
 
 type WatchActionsProps = {
   videoId: string;
+  /** С сервера: автор ролика не видит «Жалоба» с первого кадра (без мигания). */
+  initialVideoOwner?: boolean;
 };
 
-export function WatchActions({ videoId }: WatchActionsProps) {
+export function WatchActions({ videoId, initialVideoOwner = false }: WatchActionsProps) {
   const [isAuth, setIsAuth] = useState(false);
-  const [isVideoOwner, setIsVideoOwner] = useState(false);
+  const [isVideoOwner, setIsVideoOwner] = useState(initialVideoOwner);
   const [likesCount, setLikesCount] = useState(0);
   const [dislikesCount, setDislikesCount] = useState(0);
   const [myReaction, setMyReaction] = useState<"like" | "dislike" | null>(null);
@@ -263,7 +265,7 @@ export function WatchActions({ videoId }: WatchActionsProps) {
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ReportDialog targetType="video" targetId={videoId} label="Жалоба" />
+          {!isVideoOwner ? <ReportDialog targetType="video" targetId={videoId} label="Жалоба" /> : null}
           <button
             type="button"
             onClick={onShare}

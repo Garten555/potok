@@ -8,13 +8,13 @@
 |----------|----------|
 | Версия приложения | см. `web/package.json` → поле `"version"` |
 | Журнал изменений | [`CHANGELOG.md`](./CHANGELOG.md) |
-| Точки отката в Git | теги `v0.2.0`, `v0.1.0`, … (`git tag -l`) |
+| Точки отката в Git | теги `v0.3.0`, `v0.2.0`, … (`git tag -l`) |
 
 Чтобы **вернуться к конкретной версии кода** (например, после экспериментов):
 
 ```bash
 git fetch origin --tags
-git checkout v0.2.0
+git checkout v0.3.0
 cd web && npm ci && npm run build && npm start
 ```
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { SubscribeButton } from "@/components/channel/subscribe-button";
 import { WatchActions } from "@/components/watch/watch-actions";
+import { WatchDescription } from "@/components/watch/watch-description";
 import { WatchViews } from "@/components/watch/watch-views";
 
 type VideoVisibility = "public" | "unlisted" | "private";
@@ -40,6 +41,7 @@ export function VideoMetaBlock({
   const channelHandle = author?.channel_handle ?? null;
   const avatarUrl = author?.avatar_url ?? null;
   const subs = author?.subscribers_count;
+  const isViewerVideoOwner = Boolean(viewerId && viewerId === video.user_id);
 
   const visibilityLabel =
     video.visibility === "private" ? "Приватное" : video.visibility === "unlisted" ? "По ссылке" : "Публичное";
@@ -92,12 +94,10 @@ export function VideoMetaBlock({
       </div>
 
       <div className="mt-4">
-        <WatchActions videoId={video.id} />
+        <WatchActions videoId={video.id} initialVideoOwner={isViewerVideoOwner} />
       </div>
 
-      <div className="mt-4 rounded-xl bg-white/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-300">
-        {video.description?.trim() ? video.description : "Описание отсутствует."}
-      </div>
+      <WatchDescription text={video.description} />
     </div>
   );
 }
