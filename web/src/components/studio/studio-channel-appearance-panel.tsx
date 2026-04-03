@@ -7,7 +7,9 @@ import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelHomeLayoutEditor } from "@/components/channel/channel-home-layout-editor";
 import { ChannelIdentityForm } from "@/components/studio/channel-identity-form";
+import { CHANNEL_VERIFICATION_MIN_SUBSCRIBERS } from "@/lib/channel-verification";
 import type { ChannelHomeLayoutRow, ChannelPlaylistCard } from "@/lib/channel-home-types";
+import { BadgeCheck } from "lucide-react";
 
 function thumbFromJoinedVideos(
   videos: { thumbnail_url: string | null } | { thumbnail_url: string | null }[] | null,
@@ -28,6 +30,12 @@ export function StudioChannelAppearancePanel() {
   const [layoutRows, setLayoutRows] = useState<ChannelHomeLayoutRow[]>([]);
   const [channelShowPlayAll, setChannelShowPlayAll] = useState(true);
   const [savingPlayAll, setSavingPlayAll] = useState(false);
+  const [subscribersCount, setSubscribersCount] = useState(0);
+  const [channelVerified, setChannelVerified] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<string>("none");
+  const [verificationDraft, setVerificationDraft] = useState("");
+  const [verificationSending, setVerificationSending] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
@@ -46,7 +54,9 @@ export function StudioChannelAppearancePanel() {
 
     const { data: profileRow } = await supabase
       .from("users")
-      .select("channel_name, channel_handle, avatar_url, banner_url, channel_show_play_all")
+      .select(
+        "channel_name, channel_handle, avatar_url, banner_url, channel_show_play_all, subscribers_count, channel_verified, channel_verification_request_status",
+      )
       .eq("id", user.id)
       .maybeSingle();
     const prof = profileRow as {
@@ -55,12 +65,18 @@ export function StudioChannelAppearancePanel() {
       avatar_url: string | null;
       banner_url: string | null;
       channel_show_play_all?: boolean | null;
+      subscribers_count?: number | null;
+      channel_verified?: boolean | null;
+      channel_verification_request_status?: string | null;
     } | null;
     setChannelName(prof?.channel_name?.trim() || "Канал");
     setChannelHandle(prof?.channel_handle?.trim() ?? null);
     setAvatarUrl(prof?.avatar_url ?? null);
     setBannerUrl(prof?.banner_url ?? null);
     setChannelShowPlayAll(prof?.channel_show_play_all !== false);
+    setSubscribersCount(Number(prof?.subscribers_count ?? 0));
+    setChannelVerified(Boolean(prof?.channel_verified));
+    setVerificationStatus((prof?.channel_verification_request_status ?? "none").trim() || "none");
 
     const { data: channelPlaylistRows } = await supabase
       .from("playlists")
@@ -175,6 +191,87 @@ export function StudioChannelAppearancePanel() {
       </div>
 
       <ChannelIdentityForm />
+
+      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
+        <h2 className="text-sm font-semibold text-cyan-100/95">Галочка верификации</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Официальная отметка на канале и у видео. Выдаётся модераторами после проверки. Когда на канале не меньше{" "}
+          {CHANNEL_VERIFICATION_MIN_SUBSCRIBERS} подписчиков, можно отправить заявку с кратким описанием.
+        </p>
+        {channelVerified ? (
+          <p className="mt-3 flex items-center gap-2 text-sm text-emerald-200/95">
+            <BadgeCheck className="h-5 w-5 shrink-0 text-cyan-400" aria-hidden />
+            Канал верифицирован.
+          </p>
+        ) : verificationStatus === "pending" ? (
+          <p className="mt-3 text-sm text-amber-100/90">
+            Заявка отправлена и ожидает рассмотрения модераторами.
+          </p>
+        ) : (
+          <>
+            {subscribersCount < CHANNEL_VERIFICATION_MIN_SUBSCRIBERS ? (
+              <p className="mt-3 text-sm text-slate-400">
+                Сейчас подписчиков: {subscribersCount}. Нужно не меньше {CHANNEL_VERIFICATION_MIN_SUBSCRIBERS}, чтобы
+                подать заявку.
+              </p>
+            ) : verificationStatus === "rejected" ? (
+              <p className="mt-3 text-sm text-rose-200/85">
+                Предыдущая заявка отклонена. Ниже можно отправить новую.
+              </p>
+            ) : null}
+            {!channelVerified &&
+            verificationStatus !== "pending" &&
+            subscribersCount >= CHANNEL_VERIFICATION_MIN_SUBSCRIBERS ? (
+              <div className="mt-3 space-y-2">
+                <label className="text-xs text-slate-500">Текст заявки (от 10 символов)</label>
+                <textarea
+                  className="min-h-[100px] w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
+                  value={verificationDraft}
+                  onChange={(e) => {
+                    setVerificationDraft(e.target.value);
+                    setVerificationError(null);
+                  }}
+                  placeholder="Кратко опишите канал: тематика, почему нужна галочка…"
+                  disabled={verificationSending}
+                />
+                {verificationError ? (
+                  <p className="text-sm text-rose-300/90">{verificationError}</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={verificationSending || verificationDraft.trim().length < 10}
+                  className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-4 py-2 text-sm text-cyan-100 disabled:opacity-40"
+                  onClick={async () => {
+                    setVerificationSending(true);
+                    setVerificationError(null);
+                    try {
+                      const res = await fetch("/api/account/channel-verification-request", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: verificationDraft.trim() }),
+                      });
+                      const j = (await res.json()) as { error?: string };
+                      if (!res.ok) {
+                        setVerificationError(j.error ?? "Не удалось отправить");
+                        return;
+                      }
+                      setVerificationDraft("");
+                      setVerificationStatus("pending");
+                      await load();
+                    } catch {
+                      setVerificationError("Сеть недоступна");
+                    } finally {
+                      setVerificationSending(false);
+                    }
+                  }}
+                >
+                  {verificationSending ? "Отправка…" : "Отправить заявку"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
 
       <div className="rounded-xl border border-white/10 bg-[#0c1323]/80 p-4">
         <label className="flex cursor-pointer items-start gap-3">

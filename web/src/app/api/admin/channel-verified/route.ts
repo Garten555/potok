@@ -24,7 +24,19 @@ export async function POST(req: Request) {
 
   const verified = Boolean(body.verified);
   const svc = createSupabaseServiceClient();
-  const { error } = await svc.from("users").update({ channel_verified: verified }).eq("id", userId);
+  const { error } = await svc
+    .from("users")
+    .update({
+      channel_verified: verified,
+      ...(verified
+        ? {
+            channel_verification_request_message: null,
+            channel_verification_request_at: null,
+            channel_verification_request_status: "none",
+          }
+        : {}),
+    })
+    .eq("id", userId);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

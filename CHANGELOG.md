@@ -1,6 +1,12 @@
 # История версий
 
-Формат: [Semantic Versioning](https://semver.org/). Соответствующие теги в Git: `v0.6.0`, `v0.5.0`, …
+Формат: [Semantic Versioning](https://semver.org/). Соответствующие теги в Git: `v0.7.0`, `v0.6.0`, …
+
+## 0.7.0 — 2026-03-31
+
+- Студия: заявка на галочку верификации (порог подписчиков в `CHANNEL_VERIFICATION_MIN_SUBSCRIBERS`), API `POST /api/account/channel-verification-request`.
+- Админка: раздел «Галочки» (`/admin/verification-requests`), список заявок, одобрение/отклонение; поиск по названию канала или нику (`q`).
+- SQL: `supabase/30_channel_verification_request.sql` — поля заявки на верификацию; при ручной выдаче галочки в «Пользователях» заявка сбрасывается.
 
 ## 0.6.0 — 2026-03-31
 

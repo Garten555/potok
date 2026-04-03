@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import {
+  BadgeCheck,
   Flag,
   Home,
   LayoutDashboard,
@@ -38,6 +39,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const navItems: { href: string; label: string; Icon: typeof LayoutDashboard }[] = [
     { href: "/admin/overview", label: "Обзор", Icon: LayoutDashboard },
     { href: "/admin/reports", label: "Жалобы", Icon: Flag },
+    { href: "/admin/verification-requests", label: "Галочки", Icon: BadgeCheck },
     ...(admin ? [{ href: "/admin/unfreeze", label: "Разморозка", Icon: Unlock }] : []),
     ...(admin ? [{ href: "/admin/team", label: "Модераторы", Icon: Users }] : []),
     { href: "/admin/users", label: "Пользователи", Icon: UserSearch },
