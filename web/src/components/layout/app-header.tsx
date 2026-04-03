@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { isAdminRole, isStaffRole } from "@/lib/user-role";
 import { useSidebarState } from "@/components/layout/sidebar-context";
 import { SmartSearch } from "@/components/search/smart-search";
 import { MobileSearchOverlay } from "@/components/search/mobile-search-overlay";
@@ -120,14 +121,32 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
     void supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user || unsubscribed) return;
       const authUser = data.user;
+
+      let roleFromApi: string | null = null;
+      try {
+        const rr = await fetch("/api/me/role", { credentials: "same-origin" });
+        if (rr.ok) {
+          const j = (await rr.json()) as { role?: string | null };
+          roleFromApi = j.role ?? null;
+        }
+      } catch {
+        /* оставляем только данные из supabase */
+      }
+
       const { data: profileData } = await supabase
         .from("users")
         .select("id, channel_name, channel_handle, avatar_url, role")
         .eq("id", authUser.id)
         .maybeSingle();
 
+      const mergeRole = (p: HeaderProfile | null): HeaderProfile | null => {
+        if (!p) return null;
+        const role = roleFromApi ?? p.role ?? null;
+        return { ...p, role };
+      };
+
       if (profileData) {
-        if (!unsubscribed) setProfile(profileData);
+        if (!unsubscribed) setProfile(mergeRole(profileData as HeaderProfile));
         return;
       }
 
@@ -151,7 +170,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         .maybeSingle();
 
       if (!unsubscribed) {
-        setProfile(createdProfile ?? null);
+        setProfile(mergeRole((createdProfile as HeaderProfile) ?? null));
       }
     });
 
@@ -266,12 +285,12 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
 
         {isAuthenticated ? (
           <div className="flex shrink-0 items-center justify-end gap-2">
-            {profile?.role === "admin" || profile?.role === "moderator" ? (
+            {isStaffRole(profile?.role) ? (
               <Link
                 href="/admin"
                 className={clsx(
                   "hidden h-9 w-9 place-items-center rounded-full border text-slate-300 transition sm:grid",
-                  profile?.role === "admin"
+                  isAdminRole(profile?.role)
                     ? "border-amber-400/35 bg-amber-500/10 hover:bg-amber-500/20"
                     : "border-cyan-400/25 bg-cyan-500/10 hover:bg-cyan-500/20",
                 )}
@@ -281,7 +300,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                 <Shield
                   className={clsx(
                     "h-4 w-4",
-                    profile?.role === "admin" ? "text-amber-200" : "text-cyan-200",
+                    isAdminRole(profile?.role) ? "text-amber-200" : "text-cyan-200",
                   )}
                 />
               </Link>
@@ -423,7 +442,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                     <CirclePlus className="h-4 w-4 text-cyan-200" />
                     Студия
                   </Link>
-                  {profile?.role === "admin" || profile?.role === "moderator" ? (
+                  {isStaffRole(profile?.role) ? (
                     <Link
                       href="/admin"
                       className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
@@ -432,7 +451,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                       <Shield
                         className={clsx(
                           "h-4 w-4",
-                          profile?.role === "admin" ? "text-amber-200" : "text-cyan-200",
+                          isAdminRole(profile?.role) ? "text-amber-200" : "text-cyan-200",
                         )}
                       />
                       Панель персонала
