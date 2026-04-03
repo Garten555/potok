@@ -15,13 +15,17 @@ export async function GET() {
     return NextResponse.json({ role: null }, { status: 401 });
   }
 
+  const cacheHeaders = {
+    "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
+  };
+
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { data, error } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const role = (data as { role?: string } | null)?.role ?? null;
-    return NextResponse.json({ role });
+    return NextResponse.json({ role }, { headers: cacheHeaders });
   }
 
   const svc = createSupabaseServiceClient();
@@ -30,5 +34,5 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   const role = (data as { role?: string } | null)?.role ?? null;
-  return NextResponse.json({ role });
+  return NextResponse.json({ role }, { headers: cacheHeaders });
 }

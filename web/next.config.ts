@@ -4,7 +4,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   /** Меньше JS от icon-пакетов при tree-shaking импортов. */
   experimental: {
-    optimizePackageImports: ["lucide-react"],
+    /** Меньше мёртвого кода из barrel-импортов. */
+    optimizePackageImports: ["lucide-react", "clsx"],
   },
   allowedDevOrigins: ["192.168.56.1"],
   /**

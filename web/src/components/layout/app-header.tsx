@@ -28,6 +28,37 @@ type NotificationRow = {
   created_at: string;
 };
 
+const HEADER_PROFILE_CACHE_KEY = "potok.headerProfile.v1";
+
+function readHeaderProfileCache(userId: string): HeaderProfile | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(HEADER_PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { uid?: string; profile?: HeaderProfile };
+    if (parsed.uid !== userId || !parsed.profile?.id) return null;
+    return parsed.profile;
+  } catch {
+    return null;
+  }
+}
+
+function writeHeaderProfileCache(userId: string, profile: HeaderProfile) {
+  try {
+    sessionStorage.setItem(HEADER_PROFILE_CACHE_KEY, JSON.stringify({ uid: userId, profile }));
+  } catch {
+    /* storage full / disabled */
+  }
+}
+
+function clearHeaderProfileCache() {
+  try {
+    sessionStorage.removeItem(HEADER_PROFILE_CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 type AppHeaderProps = {
   /** true на главной: шапка без собственного sticky — блок с чипами оборачивает в один sticky. */
   embedded?: boolean;
@@ -116,37 +147,55 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
     }
 
     const supabase = createSupabaseBrowserClient();
-    let unsubscribed = false;
+    let cancelled = false;
 
-    void supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user || unsubscribed) return;
-      const authUser = data.user;
+    void (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (!session?.user || cancelled) return;
+      const authUser = session.user;
 
-      let roleFromApi: string | null = null;
-      try {
-        const rr = await fetch("/api/me/role", { credentials: "same-origin" });
-        if (rr.ok) {
-          const j = (await rr.json()) as { role?: string | null };
-          roleFromApi = j.role ?? null;
-        }
-      } catch {
-        /* оставляем только данные из supabase */
+      const cached = readHeaderProfileCache(authUser.id);
+      if (cached && !cancelled) {
+        setProfile(cached);
       }
 
-      const { data: profileData } = await supabase
-        .from("users")
-        .select("id, channel_name, channel_handle, avatar_url, role")
-        .eq("id", authUser.id)
-        .maybeSingle();
-
-      const mergeRole = (p: HeaderProfile | null): HeaderProfile | null => {
+      const mergeRole = (p: HeaderProfile | null, roleFromApi: string | null): HeaderProfile | null => {
         if (!p) return null;
         const role = roleFromApi ?? p.role ?? null;
         return { ...p, role };
       };
 
+      const usersPromise = supabase
+        .from("users")
+        .select("id, channel_name, channel_handle, avatar_url, role")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      const rolePromise = fetch("/api/me/role", { credentials: "same-origin" }).then((r) =>
+        r.ok ? r.json() : Promise.resolve({ role: null as string | null }),
+      );
+
+      void usersPromise.then(({ data }) => {
+        if (cancelled || !data) return;
+        const row = data as HeaderProfile;
+        setProfile((prev) => ({
+          ...row,
+          role: row.role ?? prev?.role ?? null,
+        }));
+      });
+
+      const [{ data: profileData }, rolePayload] = await Promise.all([usersPromise, rolePromise]);
+      if (cancelled) return;
+
+      const roleFromApi = (rolePayload as { role?: string | null }).role ?? null;
+
       if (profileData) {
-        if (!unsubscribed) setProfile(mergeRole(profileData as HeaderProfile));
+        const merged = mergeRole(profileData as HeaderProfile, roleFromApi);
+        if (merged) {
+          setProfile(merged);
+          writeHeaderProfileCache(authUser.id, merged);
+        }
         return;
       }
 
@@ -169,13 +218,16 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         .select("id, channel_name, channel_handle, avatar_url, role")
         .maybeSingle();
 
-      if (!unsubscribed) {
-        setProfile(mergeRole((createdProfile as HeaderProfile) ?? null));
+      if (cancelled) return;
+      const merged = mergeRole((createdProfile as HeaderProfile) ?? null, roleFromApi);
+      if (merged) {
+        setProfile(merged);
+        writeHeaderProfileCache(authUser.id, merged);
       }
-    });
+    })();
 
     return () => {
-      unsubscribed = true;
+      cancelled = true;
     };
   }, [isAuthenticated]);
 
@@ -222,6 +274,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   const handleSignOut = async () => {
     try {
       setIsSigningOut(true);
+      clearHeaderProfileCache();
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.signOut();
       window.location.href = "/";

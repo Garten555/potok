@@ -26,12 +26,13 @@ export function FrozenAccountGate({ isAuthenticated, children }: FrozenAccountGa
     const supabase = createSupabaseBrowserClient();
 
     void (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user || cancelled) return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData.session?.user?.id;
+      if (!uid || cancelled) return;
       const { data: row } = await supabase
         .from("users")
         .select("account_frozen_at")
-        .eq("id", u.user.id)
+        .eq("id", uid)
         .maybeSingle();
 
       const fr = Boolean((row as { account_frozen_at?: string | null } | null)?.account_frozen_at);

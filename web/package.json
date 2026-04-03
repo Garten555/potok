@@ -17,7 +17,6 @@
     "next": "16.2.1",
     "nodemailer": "^8.0.4",
     "plyr": "^3.8.4",
-    "plyr-react": "^6.0.0",
     "pusher": "^5.3.3",
     "pusher-js": "^8.4.3",
     "react": "19.2.4",

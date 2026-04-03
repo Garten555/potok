@@ -20,6 +20,14 @@ function playAllHrefPlaylist(videos: ChannelVideoItem[], playlistId: string): st
   return first ? `/watch/${first.id}?list=${encodeURIComponent(playlistId)}` : null;
 }
 
+function thumbFromJoinedVideos(
+  videos: { thumbnail_url: string | null } | { thumbnail_url: string | null }[] | null,
+): string | null {
+  if (!videos) return null;
+  const v = Array.isArray(videos) ? videos[0] : videos;
+  return v?.thumbnail_url ?? null;
+}
+
 type ChannelPageProps = {
   params: Promise<{ handle: string }>;
 };
@@ -49,6 +57,8 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     notFound();
   }
 
+  const visibilityList = isOwner ? (["public", "unlisted", "private"] as const) : (["public"] as const);
+
   let videosCountQuery = supabase
     .from("videos")
     .select("id", { count: "exact", head: true })
@@ -56,28 +66,68 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   if (!isOwner) {
     videosCountQuery = videosCountQuery.eq("visibility", "public");
   }
-  const { count: videosCount } = await videosCountQuery;
-  const { count: subscribersCount } = await supabase
+
+  const subsCountQuery = supabase
     .from("subscriptions")
     .select("subscriber_id", { count: "exact", head: true })
     .eq("channel_id", user.id);
-  const { data: viewerSubscription } = viewer
-    ? await supabase
+
+  const viewerSubQuery = viewer
+    ? supabase
         .from("subscriptions")
         .select("subscriber_id")
         .eq("subscriber_id", viewer.id)
         .eq("channel_id", user.id)
         .maybeSingle()
-    : { data: null };
-  const visibilityList = isOwner ? (["public", "unlisted", "private"] as const) : (["public"] as const);
+    : Promise.resolve({ data: null as { subscriber_id: string } | null });
 
-  const { data: channelVideosRaw } = await supabase
+  const channelVideosQuery = supabase
     .from("videos")
     .select("id, title, thumbnail_url, views, created_at")
     .eq("user_id", user.id)
     .in("visibility", visibilityList as unknown as string[])
     .order("created_at", { ascending: false })
     .limit(200);
+
+  const channelPlaylistRowsQuery = supabase
+    .from("playlists")
+    .select("id, title, description, visibility, created_at")
+    .eq("user_id", user.id)
+    .eq("is_system", false)
+    .eq("kind", "channel")
+    .order("created_at", { ascending: false });
+
+  const layoutRowsQuery = supabase
+    .from("channel_home_sections")
+    .select("id, position, section_kind, playlist_id, display_title")
+    .eq("user_id", user.id)
+    .order("position", { ascending: true });
+
+  const spotlightLinksQuery = supabase
+    .from("channel_spotlight_links")
+    .select("target_user_id, position")
+    .eq("owner_id", user.id)
+    .order("position", { ascending: true });
+
+  const [
+    { count: videosCount },
+    { count: subscribersCount },
+    viewerSubscriptionResult,
+    { data: channelVideosRaw },
+    { data: channelPlaylistRows },
+    { data: layoutRowsRaw, error: layoutErr },
+    { data: spotlightLinkRows },
+  ] = await Promise.all([
+    videosCountQuery,
+    subsCountQuery,
+    viewerSubQuery,
+    channelVideosQuery,
+    channelPlaylistRowsQuery,
+    layoutRowsQuery,
+    spotlightLinksQuery,
+  ]);
+
+  const viewerSubscription = viewerSubscriptionResult.data;
 
   const channelVideos: ChannelVideoItem[] = (channelVideosRaw ?? []).map((v) => {
     const row = v as {
@@ -96,15 +146,31 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
     };
   });
 
-  const { data: channelPlaylistRows } = await supabase
-    .from("playlists")
-    .select("id, title, description, visibility, created_at")
-    .eq("user_id", user.id)
-    .eq("is_system", false)
-    .eq("kind", "channel")
-    .order("created_at", { ascending: false });
-
   const playlistIds = (channelPlaylistRows ?? []).map((p) => p.id);
+  const layoutRows = layoutErr ? [] : (layoutRowsRaw ?? []);
+  const playlistIdsForHome = layoutRows
+    .filter((r) => r.section_kind === "playlist" && r.playlist_id)
+    .map((r) => String(r.playlist_id));
+  const slIds = (spotlightLinkRows ?? []).map((r) => (r as { target_user_id: string }).target_user_id);
+
+  const [pvChannelRes, pvHomeRes, spUsersRes] = await Promise.all([
+    playlistIds.length > 0
+      ? supabase
+          .from("playlist_videos")
+          .select("playlist_id, position, video_id, videos(thumbnail_url)")
+          .in("playlist_id", playlistIds)
+      : Promise.resolve({ data: null as unknown }),
+    playlistIdsForHome.length > 0
+      ? supabase
+          .from("playlist_videos")
+          .select("playlist_id, position, videos(id, title, thumbnail_url, views, created_at, visibility)")
+          .in("playlist_id", playlistIdsForHome)
+      : Promise.resolve({ data: null as unknown }),
+    slIds.length > 0
+      ? supabase.from("users").select("id, channel_name, channel_handle, avatar_url").in("id", slIds)
+      : Promise.resolve({ data: null as unknown }),
+  ]);
+
   let channelPlaylists: Array<{
     id: string;
     title: string;
@@ -117,21 +183,10 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   }> = [];
 
   if (playlistIds.length > 0) {
-    const { data: pvRows } = await supabase
-      .from("playlist_videos")
-      .select("playlist_id, position, video_id, videos(thumbnail_url)")
-      .in("playlist_id", playlistIds);
-
-    function thumbFromJoinedVideos(
-      videos: { thumbnail_url: string | null } | { thumbnail_url: string | null }[] | null,
-    ): string | null {
-      if (!videos) return null;
-      const v = Array.isArray(videos) ? videos[0] : videos;
-      return v?.thumbnail_url ?? null;
-    }
+    const pvRows = (pvChannelRes.data as unknown[] | null) ?? [];
 
     const byPlaylist = new Map<string, Array<{ position: number; video_id: string; thumb: string | null }>>();
-    for (const raw of pvRows ?? []) {
+    for (const raw of pvRows) {
       const row = raw as {
         playlist_id: string;
         position: number;
@@ -162,27 +217,12 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
 
   const playlistTitleById = new Map(channelPlaylists.map((p) => [p.id, p.title]));
 
-  const { data: layoutRowsRaw, error: layoutErr } = await supabase
-    .from("channel_home_sections")
-    .select("id, position, section_kind, playlist_id, display_title")
-    .eq("user_id", user.id)
-    .order("position", { ascending: true });
-
-  const layoutRows = layoutErr ? [] : (layoutRowsRaw ?? []);
-
-  const playlistIdsForHome = layoutRows
-    .filter((r) => r.section_kind === "playlist" && r.playlist_id)
-    .map((r) => String(r.playlist_id));
-
   let playlistVideosByPlaylistId = new Map<string, ChannelVideoItem[]>();
   if (playlistIdsForHome.length > 0) {
-    const { data: pvRows } = await supabase
-      .from("playlist_videos")
-      .select("playlist_id, position, videos(id, title, thumbnail_url, views, created_at, visibility)")
-      .in("playlist_id", playlistIdsForHome);
+    const pvRows = (pvHomeRes.data as unknown[] | null) ?? [];
 
     const bucket = new Map<string, Array<{ position: number; video: ChannelVideoItem }>>();
-    for (const raw of pvRows ?? []) {
+    for (const raw of pvRows) {
       const row = raw as {
         playlist_id: string;
         position: number;
@@ -282,20 +322,10 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
 
   const joinedDate = new Date(user.created_at).toLocaleDateString("ru-RU");
 
-  const { data: spotlightLinkRows } = await supabase
-    .from("channel_spotlight_links")
-    .select("target_user_id, position")
-    .eq("owner_id", user.id)
-    .order("position", { ascending: true });
-
   let spotlightChannels: SpotlightChannel[] = [];
-  const slIds = (spotlightLinkRows ?? []).map((r) => (r as { target_user_id: string }).target_user_id);
   if (slIds.length > 0) {
-    const { data: spUsers } = await supabase
-      .from("users")
-      .select("id, channel_name, channel_handle, avatar_url")
-      .in("id", slIds);
-    const profMap = new Map((spUsers ?? []).map((u) => [u.id as string, u as SpotlightChannel]));
+    const spUsers = (spUsersRes.data as SpotlightChannel[] | null) ?? [];
+    const profMap = new Map(spUsers.map((u) => [u.id as string, u as SpotlightChannel]));
     spotlightChannels = slIds
       .map((id) => profMap.get(id))
       .filter((c): c is SpotlightChannel => Boolean(c?.channel_handle));

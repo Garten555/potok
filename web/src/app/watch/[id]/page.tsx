@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/app-header";
-import { WatchPlayer } from "@/components/watch/watch-player";
+import { WatchPlayerLazy } from "@/components/watch/watch-player-lazy";
 import { CommentsSection } from "@/components/watch/comments-section";
 import { RecommendationsPanel } from "@/components/watch/recommendations-panel";
 import { VideoMetaBlock } from "@/components/watch/video-meta-block";
@@ -236,7 +236,7 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
               </div>
             ) : null}
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-              <WatchPlayer videoUrl={video.video_url} posterUrl={video.thumbnail_url} />
+              <WatchPlayerLazy videoUrl={video.video_url} posterUrl={video.thumbnail_url} />
             </div>
 
             <VideoMetaBlock

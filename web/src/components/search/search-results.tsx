@@ -111,40 +111,46 @@ export function SearchResults({ query }: SearchResultsProps) {
       try {
         const tokens = extractTokens(q);
 
-        const { data: authSession } = await supabase.auth.getUser();
-        const authUser = authSession.user;
-        setViewerId(authUser?.id ?? null);
-
-        let likedIds = new Set<string>();
-        let watchedIds = new Set<string>();
-
-        if (isAuthenticated && authUser) {
-            const { data: likedRows } = await supabase
-              .from("likes")
-              .select("video_id")
-              .eq("user_id", authUser.id)
-              .eq("type", "like");
-            likedIds = new Set((likedRows ?? []).map((r) => String((r as { video_id: string }).video_id)));
-
-            const { data: watchedRows } = await supabase
-              .from("watch_history")
-              .select("video_id")
-              .eq("user_id", authUser.id)
-              .order("watched_at", { ascending: false })
-              .limit(40);
-            watchedIds = new Set(
-              (watchedRows ?? []).map((r) => String((r as { video_id: string }).video_id)),
-            );
-        }
-
-        const { data: videosRaw } = await supabase
+        const videosQuery = supabase
           .from("videos")
           .select("id,title,thumbnail_url,views,created_at,user_id,description,tags,visibility")
           .in("visibility", ["public", "unlisted"])
           .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
           .limit(96);
 
-        const rawVideos = (videosRaw ?? []) as unknown as VideoRow[];
+        const channelsQuery = supabase
+          .from("users")
+          .select("id,channel_name,channel_handle,avatar_url,subscribers_count,created_at")
+          .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
+          .limit(18);
+
+        const [{ data: sessionData }, videosRes, channelsRes] = await Promise.all([
+          supabase.auth.getSession(),
+          videosQuery,
+          channelsQuery,
+        ]);
+
+        const authUser = sessionData.session?.user ?? null;
+        setViewerId(authUser?.id ?? null);
+
+        let likedIds = new Set<string>();
+        let watchedIds = new Set<string>();
+
+        if (isAuthenticated && authUser) {
+          const [likedRes, watchedRes] = await Promise.all([
+            supabase.from("likes").select("video_id").eq("user_id", authUser.id).eq("type", "like"),
+            supabase
+              .from("watch_history")
+              .select("video_id")
+              .eq("user_id", authUser.id)
+              .order("watched_at", { ascending: false })
+              .limit(40),
+          ]);
+          likedIds = new Set((likedRes.data ?? []).map((r) => String((r as { video_id: string }).video_id)));
+          watchedIds = new Set((watchedRes.data ?? []).map((r) => String((r as { video_id: string }).video_id)));
+        }
+
+        const rawVideos = (videosRes.data ?? []) as unknown as VideoRow[];
 
         // Подтягиваем данные канала для отображения рядом с видео.
         const userIds = Array.from(new Set(rawVideos.map((v) => v.user_id)));
@@ -229,13 +235,7 @@ export function SearchResults({ query }: SearchResultsProps) {
           .slice(0, 24)
           .map((x) => x.v);
 
-        const { data: channelsRaw } = await supabase
-          .from("users")
-          .select("id,channel_name,channel_handle,avatar_url,subscribers_count,created_at")
-          .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
-          .limit(18);
-
-        const rawChannels = (channelsRaw ?? []) as unknown as ChannelRow[];
+        const rawChannels = (channelsRes.data ?? []) as unknown as ChannelRow[];
 
         const scoredChannels = rawChannels.map((ch) => {
           const nameScore = matchStrength(q, ch.channel_name);
@@ -315,7 +315,7 @@ export function SearchResults({ query }: SearchResultsProps) {
     };
 
     void run();
-  }, [query, isAuthenticated, supabase, sort]);
+  }, [query, isAuthenticated, supabase, sort, kind]);
 
   const shelfIds = useMemo(() => new Set(shelfVideos.map((v) => v.id)), [shelfVideos]);
   const otherVideos = useMemo(

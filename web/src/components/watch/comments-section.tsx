@@ -35,7 +35,8 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
-  const [isAuth, setIsAuth] = useState(false);
+  /** Сервер уже знает сессию (viewerId); клиентский getUser иногда отстаёт — не прячем форму. */
+  const [isAuth, setIsAuth] = useState(() => Boolean(viewerId));
   const pusher = useMemo(() => createPusherClient(), []);
 
   const isStaff = viewerRole === "moderator" || viewerRole === "admin";
@@ -65,18 +66,23 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
   useEffect(() => {
     const init = async () => {
       const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase.auth.getUser();
-      setIsAuth(Boolean(data.user));
-      if (data.user) {
-        const { data: prof } = await supabase.from("users").select("role").eq("id", data.user.id).maybeSingle();
-        setViewerRole((prof as { role?: string } | null)?.role ?? "user");
-      } else {
-        setViewerRole(null);
-      }
-      await loadComments();
+      await Promise.all([
+        loadComments(),
+        (async () => {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const uid = sessionData.session?.user?.id ?? null;
+          setIsAuth(Boolean(uid) || Boolean(viewerId));
+          if (uid) {
+            const { data: prof } = await supabase.from("users").select("role").eq("id", uid).maybeSingle();
+            setViewerRole((prof as { role?: string } | null)?.role ?? "user");
+          } else {
+            setViewerRole(null);
+          }
+        })(),
+      ]);
     };
     void init();
-  }, [videoId, loadComments]);
+  }, [videoId, loadComments, viewerId]);
 
   const grouped = useMemo(() => {
     const roots = comments.filter((c) => !c.parent_id);
@@ -110,17 +116,18 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
       setIsSending(true);
       setError("");
       const supabase = createSupabaseBrowserClient();
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+      if (!user) {
         setError("Войдите, чтобы оставить комментарий.");
         return;
       }
 
       const { error: insertError } = await supabase.from("comments").insert({
         video_id: videoId,
-        user_id: authData.user.id,
+        user_id: user.id,
         content: normalized,
-        parent_id: replyTo,
+        parent_id: replyTo ?? null,
       });
       if (insertError) {
         setError(insertError.message.includes("banned") ? "Доступ ограничен." : "Не удалось отправить комментарий.");
@@ -189,7 +196,6 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     return () => {
       channel.unbind("comments:updated", handler);
       pusher.unsubscribe(`video-${videoId}`);
-      pusher.disconnect();
     };
   }, [pusher, videoId, loadComments]);
 

@@ -42,62 +42,51 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const pusher = useMemo(() => createPusherClient(), []);
 
-  const loadPlaylistMembershipCount = useCallback(async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      setPlaylistMembershipCount(null);
-      return;
-    }
-    const { data: mine } = await supabase.from("playlists").select("id").eq("user_id", userData.user.id);
-    const mineIds = new Set((mine ?? []).map((r) => r.id as string));
-    if (mineIds.size === 0) {
-      setPlaylistMembershipCount(0);
-      return;
-    }
-    const { data: links } = await supabase.from("playlist_videos").select("playlist_id").eq("video_id", videoId);
-    const n = (links ?? []).filter((row) => mineIds.has((row as { playlist_id: string }).playlist_id)).length;
-    setPlaylistMembershipCount(n);
-  }, [supabase, videoId]);
-
-  const loadReactionData = useCallback(async () => {
+  /** Один проход: счётчики реакций, сессия, владелец, моя реакция, плейлисты — без двойного getUser. */
+  const loadWatchActionsData = useCallback(async () => {
     const { data: likeRows } = await supabase.from("likes").select("type").eq("video_id", videoId);
     const likeCount = (likeRows ?? []).filter((row) => row.type === "like").length;
     const dislikeCount = (likeRows ?? []).filter((row) => row.type === "dislike").length;
     setLikesCount(likeCount);
     setDislikesCount(dislikeCount);
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const user = sessionData.session?.user ?? null;
+    if (!user) {
       setIsAuth(false);
       setMyReaction(null);
       setIsVideoOwner(false);
+      setPlaylistMembershipCount(null);
       return { likesCount: likeCount, dislikesCount: dislikeCount };
     }
     setIsAuth(true);
-    const { data: videoMeta } = await supabase
-      .from("videos")
-      .select("user_id")
-      .eq("id", videoId)
-      .maybeSingle();
-    setIsVideoOwner(videoMeta?.user_id === userData.user.id);
 
-    const { data: myRow } = await supabase
-      .from("likes")
-      .select("type")
-      .eq("video_id", videoId)
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-    setMyReaction((myRow?.type as "like" | "dislike" | undefined) ?? null);
+    const [videoMeta, myRow, mine, links] = await Promise.all([
+      supabase.from("videos").select("user_id").eq("id", videoId).maybeSingle(),
+      supabase.from("likes").select("type").eq("video_id", videoId).eq("user_id", user.id).maybeSingle(),
+      supabase.from("playlists").select("id").eq("user_id", user.id),
+      supabase.from("playlist_videos").select("playlist_id").eq("video_id", videoId),
+    ]);
+
+    setIsVideoOwner(videoMeta.data?.user_id === user.id);
+    setMyReaction((myRow.data?.type as "like" | "dislike" | undefined) ?? null);
+
+    const mineIds = new Set((mine.data ?? []).map((r) => r.id as string));
+    if (mineIds.size === 0) {
+      setPlaylistMembershipCount(0);
+    } else {
+      const n = (links.data ?? []).filter((row) =>
+        mineIds.has((row as { playlist_id: string }).playlist_id),
+      ).length;
+      setPlaylistMembershipCount(n);
+    }
+
     return { likesCount: likeCount, dislikesCount: dislikeCount };
   }, [supabase, videoId]);
 
   useEffect(() => {
-    void loadReactionData();
-  }, [loadReactionData]);
-
-  useEffect(() => {
-    void loadPlaylistMembershipCount();
-  }, [loadPlaylistMembershipCount]);
+    void loadWatchActionsData();
+  }, [loadWatchActionsData]);
 
   useEffect(() => {
     setNewPlaylistKind(isVideoOwner ? "channel" : "user");
@@ -111,22 +100,19 @@ export function WatchActions({ videoId }: WatchActionsProps) {
     try {
       setIsSavingReaction(true);
       setActionInfo("");
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData.session?.user?.id;
+      if (!uid) return;
 
       if (myReaction === type) {
-        await supabase
-          .from("likes")
-          .delete()
-          .eq("video_id", videoId)
-          .eq("user_id", userData.user.id);
+        await supabase.from("likes").delete().eq("video_id", videoId).eq("user_id", uid);
       } else {
         await supabase.from("likes").upsert(
-          { video_id: videoId, user_id: userData.user.id, type },
+          { video_id: videoId, user_id: uid, type },
           { onConflict: "user_id,video_id" },
         );
       }
-      const next = await loadReactionData();
+      const next = await loadWatchActionsData();
       await triggerPusherEvent({
         channel: `video-${videoId}`,
         event: "reactions:updated",
@@ -143,7 +129,7 @@ export function WatchActions({ videoId }: WatchActionsProps) {
     const handler = (data: unknown) => {
       const payload = typeof data === "object" && data ? (data as { videoId?: string }) : {};
       if (payload.videoId && payload.videoId !== videoId) return;
-      void loadReactionData();
+      void loadWatchActionsData();
     };
 
     channel.bind("reactions:updated", handler);
@@ -151,10 +137,8 @@ export function WatchActions({ videoId }: WatchActionsProps) {
     return () => {
       channel.unbind("reactions:updated", handler);
       pusher.unsubscribe(`video-${videoId}`);
-      // Полезно, чтобы не держать лишние сокеты на странице.
-      pusher.disconnect();
     };
-  }, [pusher, videoId, loadReactionData]);
+  }, [pusher, videoId, loadWatchActionsData]);
 
   const onShare = async () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
@@ -165,15 +149,16 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   const openPlaylists = async () => {
     setIsPlaylistOpen(true);
     setActionInfo("");
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) {
       setActionInfo("Войдите, чтобы сохранять в плейлист.");
       return;
     }
     const { data: list } = await supabase
       .from("playlists")
       .select("id, title, visibility, is_system")
-      .eq("user_id", userData.user.id)
+      .eq("user_id", uid)
       .order("created_at", { ascending: false });
     setPlaylists((list as PlaylistItem[]) ?? []);
 
@@ -191,12 +176,13 @@ export function WatchActions({ videoId }: WatchActionsProps) {
       setActionInfo("Канальный плейлист можно создать только для вашего видео.");
       return;
     }
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return;
     const { data: created } = await supabase
       .from("playlists")
       .insert({
-        user_id: userData.user.id,
+        user_id: uid,
         title: normalized,
         kind: newPlaylistKind,
         visibility: newPlaylistVisibility,
@@ -213,8 +199,9 @@ export function WatchActions({ videoId }: WatchActionsProps) {
   };
 
   const savePlaylists = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return;
     try {
       setIsSavingToPlaylists(true);
       const { data: existing } = await supabase
@@ -239,7 +226,7 @@ export function WatchActions({ videoId }: WatchActionsProps) {
       }
       setActionInfo("Плейлисты обновлены.");
       setIsPlaylistOpen(false);
-      void loadPlaylistMembershipCount();
+      void loadWatchActionsData();
     } finally {
       setIsSavingToPlaylists(false);
     }

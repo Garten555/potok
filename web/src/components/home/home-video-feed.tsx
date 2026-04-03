@@ -40,49 +40,43 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
   >(new Map());
   const [categoryById, setCategoryById] = useState<Map<string, string>>(new Map());
   const [now, setNow] = useState(() => Date.now());
+  /** Пока первая загрузка списка не завершена — скелетон, а не «нет видео». */
+  const [feedReady, setFeedReady] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data: authData } = await supabase.auth.getUser();
-      let subscribedChannelIds = new Set<string>();
-      let likedVideoIds = new Set<string>();
-      let watchedVideoIds = new Set<string>();
-      if (authData.user) {
-        const { data: subs } = await supabase
-          .from("subscriptions")
-          .select("channel_id")
-          .eq("subscriber_id", authData.user.id);
-        subscribedChannelIds = new Set((subs ?? []).map((s) => String((s as { channel_id: string }).channel_id)));
-        const { data: lk } = await supabase
-          .from("likes")
-          .select("video_id")
-          .eq("user_id", authData.user.id)
-          .eq("type", "like");
-        likedVideoIds = new Set((lk ?? []).map((l) => String((l as { video_id: string }).video_id)));
-        const { data: wh } = await supabase
-          .from("watch_history")
-          .select("video_id")
-          .eq("user_id", authData.user.id)
-          .order("watched_at", { ascending: false })
-          .limit(80);
-        watchedVideoIds = new Set((wh ?? []).map((w) => String((w as { video_id: string }).video_id)));
-      }
-      setRecCtx({
-        now: Date.now(),
-        subscribedChannelIds,
-        likedVideoIds,
-        watchedVideoIds,
-      });
+    let cancelled = false;
 
-      const { data: videosWithVisibility, error: visibilityError } = await supabase
+    const load = async () => {
+      try {
+      const supabase = createSupabaseBrowserClient();
+
+      const videosQuery = supabase
         .from("videos")
         .select("id, title, description, thumbnail_url, views, created_at, user_id, category_id, visibility")
         .in("visibility", ["public", "unlisted"])
         .order("created_at", { ascending: false })
         .limit(80);
 
-      let loadedVideos: HomeVideoItem[] = (videosWithVisibility as HomeVideoItem[]) ?? [];
+      const [sessionRes, videosRes, categoriesRes] = await Promise.all([
+        supabase.auth.getSession(),
+        videosQuery,
+        supabase.from("categories").select("id, slug"),
+      ]);
+
+      if (cancelled) return;
+
+      setCategoryById(
+        new Map(
+          (categoriesRes.data ?? []).map((row) => {
+            const c = row as { id: string; slug: string };
+            return [c.id, c.slug];
+          }),
+        ),
+      );
+
+      let loadedVideos: HomeVideoItem[] = (videosRes.data as HomeVideoItem[]) ?? [];
+      const visibilityError = videosRes.error;
+
       if (
         visibilityError &&
         visibilityError.message.toLowerCase().includes("column") &&
@@ -93,6 +87,7 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
           .select("id, title, description, thumbnail_url, views, created_at, user_id, category_id")
           .order("created_at", { ascending: false })
           .limit(80);
+        if (cancelled) return;
         loadedVideos = (fallbackVideos as HomeVideoItem[]) ?? [];
       }
 
@@ -115,46 +110,88 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
         }
       }
 
+      if (cancelled) return;
       setVideos(loadedVideos);
+      setFeedReady(true);
 
+      const user = sessionRes.data.session?.user ?? null;
       const vids = loadedVideos.map((v) => v.id);
+      const userIds = Array.from(new Set(loadedVideos.map((video) => video.user_id).filter(Boolean)));
+
+      const prefsPromise =
+        user != null
+          ? Promise.all([
+              supabase.from("subscriptions").select("channel_id").eq("subscriber_id", user.id),
+              supabase.from("likes").select("video_id").eq("user_id", user.id).eq("type", "like"),
+              supabase
+                .from("watch_history")
+                .select("video_id")
+                .eq("user_id", user.id)
+                .order("watched_at", { ascending: false })
+                .limit(80),
+            ])
+          : Promise.resolve(null);
+
+      const [prefs, likeAgg, authorsRes] = await Promise.all([
+        prefsPromise,
+        vids.length > 0
+          ? supabase.from("likes").select("video_id").eq("type", "like").in("video_id", vids)
+          : Promise.resolve({ data: null as { video_id: string }[] | null }),
+        userIds.length > 0
+          ? supabase.from("users").select("id, channel_name, avatar_url").in("id", userIds)
+          : Promise.resolve({ data: null as { id: string; channel_name: string | null; avatar_url: string | null }[] | null }),
+      ]);
+
+      if (cancelled) return;
+
+      let subscribedChannelIds = new Set<string>();
+      let likedVideoIds = new Set<string>();
+      let watchedVideoIds = new Set<string>();
+      if (prefs) {
+        const [subs, lk, wh] = prefs;
+        subscribedChannelIds = new Set(
+          (subs.data ?? []).map((s) => String((s as { channel_id: string }).channel_id)),
+        );
+        likedVideoIds = new Set((lk.data ?? []).map((l) => String((l as { video_id: string }).video_id)));
+        watchedVideoIds = new Set((wh.data ?? []).map((w) => String((w as { video_id: string }).video_id)));
+      }
+
+      setRecCtx({
+        now: Date.now(),
+        subscribedChannelIds,
+        likedVideoIds,
+        watchedVideoIds,
+      });
+
       const nextLikeMap = new Map<string, number>();
-      if (vids.length > 0) {
-        const { data: likeRows } = await supabase
-          .from("likes")
-          .select("video_id")
-          .eq("type", "like")
-          .in("video_id", vids);
-        for (const row of likeRows ?? []) {
-          const id = String((row as { video_id: string }).video_id);
-          nextLikeMap.set(id, (nextLikeMap.get(id) ?? 0) + 1);
-        }
+      for (const row of likeAgg.data ?? []) {
+        const id = String((row as { video_id: string }).video_id);
+        nextLikeMap.set(id, (nextLikeMap.get(id) ?? 0) + 1);
       }
       setLikeMap(nextLikeMap);
 
-      const userIds = Array.from(new Set(loadedVideos.map((video) => video.user_id).filter(Boolean)));
-      if (userIds.length > 0) {
-        const { data: authors } = await supabase
-          .from("users")
-          .select("id, channel_name, avatar_url")
-          .in("id", userIds);
+      if (authorsRes.data && authorsRes.data.length > 0) {
         setAuthorsMap(
           new Map(
-            (authors ?? []).map((row) => {
-              const a = row as { id: string; channel_name: string | null; avatar_url: string | null };
+            authorsRes.data.map((a) => {
+              const row = a as { id: string; channel_name: string | null; avatar_url: string | null };
               return [
-                String(a.id),
-                { channel_name: a.channel_name ?? "Канал", avatar_url: a.avatar_url ?? null },
+                String(row.id),
+                { channel_name: row.channel_name ?? "Канал", avatar_url: row.avatar_url ?? null },
               ];
             }),
           ),
         );
       }
-
-      const { data: categories } = await supabase.from("categories").select("id, slug");
-      setCategoryById(new Map((categories ?? []).map((category) => [category.id, category.slug])));
+      } catch {
+        if (!cancelled) setFeedReady(true);
+      }
     };
+
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Чтобы соблюсти чистоту рендера (eslint react-hooks/purity), обновляем время через state.
@@ -191,7 +228,24 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
           <PlayCircle className="h-4 w-4 text-cyan-200" />
           Рекомендации
         </h2>
-        {filteredVideos.length > 0 ? (
+        {!feedReady ? (
+          <div
+            className={
+              "grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 sm:gap-x-4 " +
+              "lg:grid-cols-3 xl:grid-cols-4"
+            }
+            aria-busy
+            aria-label="Загрузка рекомендаций"
+          >
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="min-w-0 space-y-2">
+                <div className="aspect-video w-full animate-pulse rounded-xl bg-white/[0.08]" />
+                <div className="h-4 w-[88%] animate-pulse rounded bg-white/[0.06]" />
+                <div className="h-3 w-[55%] animate-pulse rounded bg-white/[0.05]" />
+              </div>
+            ))}
+          </div>
+        ) : filteredVideos.length > 0 ? (
           <div
             className={
               "grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 sm:gap-x-4 " +
