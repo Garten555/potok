@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
+import { ChannelVerifiedBadge } from "@/components/channel/channel-verified-badge";
 import { SubscribeButton } from "@/components/channel/subscribe-button";
 import { WatchActions } from "@/components/watch/watch-actions";
 import { WatchDescription } from "@/components/watch/watch-description";
@@ -22,6 +23,7 @@ export type WatchAuthorMeta = {
   channel_handle: string | null;
   avatar_url: string | null;
   subscribers_count?: number | null;
+  channel_verified?: boolean;
 };
 
 type VideoMetaBlockProps = {
@@ -59,12 +61,15 @@ export function VideoMetaBlock({
           <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
             <ChannelAvatar channelName={channelName} avatarUrl={avatarUrl} variant="video" />
             <div className="min-w-0 flex-1">
-              <Link
-                href={channelHandle ? `/@${channelHandle}` : "/"}
-                className="block truncate text-base font-semibold text-slate-100 transition hover:text-cyan-200"
-              >
-                {channelName}
-              </Link>
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <Link
+                  href={channelHandle ? `/@${channelHandle}` : "/"}
+                  className="truncate text-base font-semibold text-slate-100 transition hover:text-cyan-200"
+                >
+                  {channelName}
+                </Link>
+                {author?.channel_verified ? <ChannelVerifiedBadge size="sm" /> : null}
+              </div>
               {channelHandle ? (
                 <p className="mt-0.5 truncate text-sm text-slate-400">@{channelHandle}</p>
               ) : null}

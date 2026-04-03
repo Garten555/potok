@@ -9,13 +9,16 @@ export async function GET() {
 
   const svc = createSupabaseServiceClient();
 
-  const [openRes, reviewingRes, resolvedWeekRes] = await Promise.all([
+  const [openRes, reviewingRes, resolvedWeekRes, usersTotalRes, videosTotalRes, verifiedRes] = await Promise.all([
     svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     svc.from("reports").select("id", { count: "exact", head: true }).eq("status", "reviewing"),
     svc
       .from("reports")
       .select("id", { count: "exact", head: true })
       .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    svc.from("users").select("id", { count: "exact", head: true }),
+    svc.from("videos").select("id", { count: "exact", head: true }),
+    svc.from("users").select("id", { count: "exact", head: true }).eq("channel_verified", true),
   ]);
 
   let pendingUnfreeze: number | null = null;
@@ -32,6 +35,9 @@ export async function GET() {
     reports_open: openRes.count ?? 0,
     reports_reviewing: reviewingRes.count ?? 0,
     reports_last_7d: resolvedWeekRes.count ?? 0,
+    users_total: usersTotalRes.count ?? 0,
+    videos_total: videosTotalRes.count ?? 0,
+    verified_channels: verifiedRes.count ?? 0,
     pending_unfreeze: pendingUnfreeze,
     viewerRole: gate.role,
   });

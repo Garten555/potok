@@ -10,6 +10,7 @@ type UserRow = {
   role: string | null;
   banned_until: string | null;
   account_frozen_at: string | null;
+  channel_verified: boolean | null;
 };
 
 /** Поиск пользователя по UUID, @handle или части handle / ника (для модерации). */
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   if (UUID_RE.test(raw)) {
     const { data, error } = await svc
       .from("users")
-      .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at")
+      .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at, channel_verified")
       .eq("id", raw)
       .maybeSingle();
     if (error) {
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
 
   const { data: byHandle, error: hErr } = await svc
     .from("users")
-    .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at")
+    .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at, channel_verified")
     .ilike("channel_handle", like)
     .limit(20);
 
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
 
   const { data: byName, error: nErr } = await svc
     .from("users")
-    .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at")
+    .select("id, channel_name, channel_handle, role, banned_until, account_frozen_at, channel_verified")
     .ilike("channel_name", like)
     .limit(20);
 

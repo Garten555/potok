@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { BadgeCheck } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -11,6 +12,7 @@ type UserRow = {
   role: string | null;
   banned_until: string | null;
   account_frozen_at: string | null;
+  channel_verified?: boolean | null;
 };
 
 export function AdminUsersSection() {
@@ -19,6 +21,7 @@ export function AdminUsersSection() {
   const [error, setError] = useState<string | null>(null);
   const [single, setSingle] = useState<{ user: UserRow | null; email?: string | null } | null>(null);
   const [list, setList] = useState<UserRow[] | null>(null);
+  const [verifySaving, setVerifySaving] = useState(false);
 
   const search = async () => {
     const term = q.trim();
@@ -59,6 +62,37 @@ export function AdminUsersSection() {
     }
   };
 
+  const setVerified = async (userId: string, verified: boolean) => {
+    setVerifySaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/channel-verified", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, verified }),
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(j.error ?? "Не удалось обновить верификацию");
+        return;
+      }
+      setSingle((prev) =>
+        prev?.user && prev.user.id === userId
+          ? { ...prev, user: { ...prev.user, channel_verified: verified } }
+          : prev,
+      );
+      setList((prev) =>
+        prev
+          ? prev.map((u) => (u.id === userId ? { ...u, channel_verified: verified } : u))
+          : prev,
+      );
+    } catch {
+      setError("Сеть недоступна");
+    } finally {
+      setVerifySaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Пользователи</h1>
@@ -96,7 +130,14 @@ export function AdminUsersSection() {
             <p className="text-slate-500">Пользователь не найден.</p>
           ) : (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-sm">
-              <p className="text-lg font-medium text-slate-100">{single.user.channel_name ?? "—"}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-lg font-medium text-slate-100">{single.user.channel_name ?? "—"}</p>
+                {single.user.channel_verified ? (
+                  <span title="Верифицирован">
+                    <BadgeCheck className="h-5 w-5 shrink-0 text-cyan-400" aria-hidden />
+                  </span>
+                ) : null}
+              </div>
               {single.user.channel_handle ? (
                 <p className="text-cyan-200/85">@{single.user.channel_handle}</p>
               ) : null}
@@ -124,6 +165,19 @@ export function AdminUsersSection() {
                   </dd>
                 </div>
               </dl>
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-white/20 bg-[#0b1120] text-cyan-500 focus:ring-cyan-500/40"
+                    checked={Boolean(single.user.channel_verified)}
+                    disabled={verifySaving}
+                    onChange={(e) => void setVerified(single.user!.id, e.target.checked)}
+                  />
+                  Верификация канала (галочка на сайте)
+                </label>
+                {verifySaving ? <span className="text-xs text-slate-500">Сохранение…</span> : null}
+              </div>
               {single.user.channel_handle ? (
                 <Link
                   href={`/@${single.user.channel_handle}`}
@@ -149,6 +203,9 @@ export function AdminUsersSection() {
               >
                 <div>
                   <span className="font-medium text-slate-100">{u.channel_name ?? "—"}</span>{" "}
+                  {u.channel_verified ? (
+                    <BadgeCheck className="inline h-4 w-4 align-middle text-cyan-400" aria-hidden />
+                  ) : null}{" "}
                   {u.channel_handle ? (
                     <span className="text-cyan-200/80">@{u.channel_handle}</span>
                   ) : null}

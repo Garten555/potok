@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppHeader } from "@/components/layout/app-header";
 import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
+import { ChannelVerifiedBadge } from "@/components/channel/channel-verified-badge";
 import { ChannelTabs } from "@/components/channel/channel-tabs";
 import type { SpotlightChannel } from "@/components/channel/channel-spotlight-strip";
 import { SubscribeButton } from "@/components/channel/subscribe-button";
@@ -42,7 +43,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   const { data: user, error } = await supabase
     .from("users")
     .select(
-      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all, account_frozen_at",
+      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all, account_frozen_at, channel_verified",
     )
     .ilike("channel_handle", handle)
     .maybeSingle();
@@ -357,8 +358,11 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
                 />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold text-slate-100 sm:text-3xl">
-                  {user.channel_name}
+                <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-2xl font-semibold text-slate-100 sm:text-3xl">
+                  <span className="min-w-0 truncate">{user.channel_name}</span>
+                  {(user as { channel_verified?: boolean }).channel_verified ? (
+                    <ChannelVerifiedBadge className="shrink-0 text-cyan-400" />
+                  ) : null}
                 </h1>
                 <p className="mt-1 text-sm text-cyan-200/90">@{user.channel_handle}</p>
                 <p className="mt-2 text-xs text-slate-500 sm:text-sm">

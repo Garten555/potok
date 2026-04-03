@@ -9,6 +9,9 @@ type Stats = {
   reports_open: number;
   reports_reviewing: number;
   reports_last_7d: number;
+  users_total: number;
+  videos_total: number;
+  verified_channels: number;
   pending_unfreeze: number | null;
   viewerRole: string | null;
 };
@@ -56,7 +59,7 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
         <div
           className={clsx(
             "mt-8 grid gap-4",
-            admin ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3",
+            "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
           )}
         >
           <StatCard label="Жалобы открыты" value={stats.reports_open} hint="Статус open" accent="cyan" />
@@ -67,12 +70,20 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
             hint="Созданы за последнюю неделю"
             accent="violet"
           />
+          <StatCard label="Пользователей" value={stats.users_total} hint="Всего в базе" accent="sky" />
+          <StatCard label="Видео" value={stats.videos_total} hint="Всего загрузок" accent="rose" />
+          <StatCard
+            label="Верифицировано"
+            value={stats.verified_channels}
+            hint="Каналов с галочкой"
+            accent="emerald"
+          />
           {admin && stats.pending_unfreeze !== null ? (
             <StatCard
               label="Заявок на разморозку"
               value={stats.pending_unfreeze}
               hint="Ожидают решения"
-              accent="emerald"
+              accent="amber"
             />
           ) : null}
         </div>
@@ -93,7 +104,7 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
             <li>
               →{" "}
               <Link href="/admin/users" className="text-cyan-300 hover:underline">
-                Поиск пользователя по UUID или @handle
+                Пользователи: поиск и верификация канала (галочка)
               </Link>
             </li>
           </ul>
@@ -135,7 +146,7 @@ function StatCard({
   label: string;
   value: number;
   hint: string;
-  accent: "cyan" | "amber" | "violet" | "emerald";
+  accent: "cyan" | "amber" | "violet" | "emerald" | "sky" | "rose";
 }) {
   const ring =
     accent === "cyan"
@@ -144,7 +155,11 @@ function StatCard({
         ? "border-amber-500/25 shadow-[0_0_0_1px_rgba(251,191,36,0.12)]"
         : accent === "violet"
           ? "border-violet-500/25 shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
-          : "border-emerald-500/25 shadow-[0_0_0_1px_rgba(52,211,153,0.12)]";
+          : accent === "sky"
+            ? "border-sky-500/25 shadow-[0_0_0_1px_rgba(56,189,248,0.12)]"
+            : accent === "rose"
+              ? "border-rose-500/25 shadow-[0_0_0_1px_rgba(251,113,133,0.12)]"
+              : "border-emerald-500/25 shadow-[0_0_0_1px_rgba(52,211,153,0.12)]";
 
   const numCls =
     accent === "cyan"
@@ -153,7 +168,11 @@ function StatCard({
         ? "text-amber-200"
         : accent === "violet"
           ? "text-violet-200"
-          : "text-emerald-200";
+          : accent === "sky"
+            ? "text-sky-200"
+            : accent === "rose"
+              ? "text-rose-200"
+              : "text-emerald-200";
 
   return (
     <div className={`rounded-2xl border bg-[#0b0e16]/80 p-4 ${ring}`}>

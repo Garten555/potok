@@ -102,7 +102,7 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
 
   const { data: channelInfo } = await supabase
     .from("users")
-    .select("channel_name, channel_handle, avatar_url, subscribers_count")
+    .select("channel_name, channel_handle, avatar_url, subscribers_count, channel_verified")
     .eq("id", video.user_id)
     .maybeSingle();
 
@@ -203,6 +203,7 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
           channel_handle: channelInfo.channel_handle,
           avatar_url: channelInfo.avatar_url,
           subscribers_count: channelInfo.subscribers_count ?? 0,
+          channel_verified: Boolean((channelInfo as { channel_verified?: boolean }).channel_verified),
         }
       : null;
 
