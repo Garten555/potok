@@ -15,6 +15,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.0.1",
     "next": "16.2.1",
+    "nextjs-toploader": "^3.9.17",
     "nodemailer": "^8.0.4",
     "plyr": "^3.8.4",
     "pusher": "^5.3.3",

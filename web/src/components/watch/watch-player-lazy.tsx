@@ -8,9 +8,7 @@ export const WatchPlayerLazy = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid aspect-video place-items-center rounded-2xl bg-black/50 text-sm text-slate-500">
-        Загрузка плеера…
-      </div>
+      <div className="aspect-video w-full rounded-2xl bg-black" aria-hidden />
     ),
   },
 );

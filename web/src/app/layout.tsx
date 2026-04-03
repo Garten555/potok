@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,7 @@ export default function RootLayout({
         ) : null}
       </head>
       <body className="min-h-full flex flex-col">
+        <NavigationProgress />
         <AppShell>{children}</AppShell>
       </body>
     </html>
