@@ -3,24 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { REPORT_REASON_CODES, reportReasonLabel } from "@/lib/report-reasons";
+import { reportStatusLabelRu } from "@/lib/report-status";
+import type {
+  ModerationReportRow,
+  ModerationReportsListErrorBody,
+  ModerationReportsListResponse,
+} from "@/lib/moderation-reports-types";
 import clsx from "clsx";
 
-export type ReportRow = {
-  id: string;
-  reporter_id: string;
-  target_type: string;
-  target_id: string;
-  reason_code: string;
-  details: string | null;
-  status: string;
-  created_at: string;
-  resolution_note: string | null;
-  moderator_action: string | null;
+export type ReportRow = ModerationReportRow;
+
+export type AdminReportsSectionProps = {
+  viewerRole: string | null;
 };
 
-export function AdminReportsSection({ viewerRole }: { viewerRole: string | null }) {
+export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [reports, setReports] = useState<ReportRow[]>([]);
+  const [reports, setReports] = useState<ModerationReportRow[]>([]);
   const [kindFilter, setKindFilter] = useState<"" | "video" | "comment" | "channel">("");
   const [statusFilter, setStatusFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
@@ -29,35 +28,46 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
 
   const loadReports = useCallback(
-    async (channelOverride?: string) => {
+    async (channelOverride?: string, pageArg?: number) => {
     setLoading(true);
     setFetchError(null);
     try {
       const params = new URLSearchParams();
       const ch = (channelOverride !== undefined ? channelOverride : channelFilter).trim();
+      const pageNum = pageArg ?? page;
       if (ch) params.set("channel", ch);
       if (kindFilter) params.set("target_type", kindFilter);
       if (statusFilter) params.set("status", statusFilter);
       if (reasonFilter) params.set("reason", reasonFilter);
       if (q.trim()) params.set("q", q.trim());
+      params.set("page", String(pageNum));
+      params.set("limit", String(pageSize));
       const res = await fetch(`/api/moderation/reports?${params.toString()}`);
-      const j = (await res.json()) as { reports?: ReportRow[]; error?: string };
+      const j = (await res.json()) as ModerationReportsListResponse | ModerationReportsListErrorBody;
       if (!res.ok) {
         setReports([]);
-        setFetchError(j.error ?? `Ошибка ${res.status}`);
+        setTotal(0);
+        const errBody = j as ModerationReportsListErrorBody;
+        setFetchError(errBody.error ?? `Ошибка ${res.status}`);
         return;
       }
-      setReports(j.reports ?? []);
+      const ok = j as ModerationReportsListResponse;
+      setReports(ok.reports ?? []);
+      setTotal(typeof ok.total === "number" ? ok.total : ok.reports?.length ?? 0);
     } catch {
       setReports([]);
+      setTotal(0);
       setFetchError("Сеть недоступна");
     } finally {
       setLoading(false);
     }
   },
-    [kindFilter, statusFilter, reasonFilter, channelFilter, q],
+    [kindFilter, statusFilter, reasonFilter, channelFilter, q, page, pageSize],
   );
 
   useEffect(() => {
@@ -80,7 +90,7 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
     }
   };
 
-  const banFromReport = async (r: ReportRow) => {
+  const banFromReport = async (r: ModerationReportRow) => {
     const uid = window.prompt("UUID пользователя для бана (или вставьте из цели жалобы)");
     if (!uid) return;
     const until = window.prompt("Дата окончания бана ISO, напр. 2099-12-31T00:00:00.000Z");
@@ -131,23 +141,26 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
         Глобальная модерация сайта: видео, комментарии и каналы. Чтобы смотреть все жалобы, связанные с конкретным каналом,
-        укажите UUID владельца канала или @handle — подтянутся жалобы на канал, на его ролики и на комментарии под ними.
-        Заметка при закрытии; бан по жалобе — только у администраторов.
+        укажите UUID владельца, @handle или часть названия канала / ника (если совпадение одно) — подтянутся жалобы
+        на канал, на его ролики и на комментарии под ними. Заметка при закрытии; бан по жалобе — только у администраторов.
       </p>
 
       <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
         <label className="text-xs font-medium uppercase tracking-wide text-cyan-200/85">Фильтр по каналу</label>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <input
-            className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 font-mono text-sm text-slate-100"
+            className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
-            placeholder="UUID владельца или @handle канала"
+            placeholder="UUID, @handle или часть названия канала"
           />
           <button
             type="button"
             className="rounded-lg border border-cyan-400/35 bg-cyan-500/20 px-3 py-2 text-sm text-cyan-100"
-            onClick={() => void loadReports()}
+            onClick={() => {
+              setPage(1);
+              void loadReports(undefined, 1);
+            }}
           >
             Показать
           </button>
@@ -157,7 +170,8 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
               className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-400 hover:bg-white/5"
               onClick={() => {
                 setChannelFilter("");
-                void loadReports("");
+                setPage(1);
+                void loadReports("", 1);
               }}
             >
               Сбросить канал
@@ -171,7 +185,10 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
           <button
             key={tab.id || "all"}
             type="button"
-            onClick={() => setKindFilter(tab.id)}
+            onClick={() => {
+              setKindFilter(tab.id);
+              setPage(1);
+            }}
             className={clsx(
               "rounded-lg px-3 py-1.5 text-sm font-medium transition",
               kindFilter === tab.id
@@ -190,13 +207,16 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
           <select
             className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
           >
             <option value="">Все</option>
-            <option value="open">open</option>
-            <option value="reviewing">reviewing</option>
-            <option value="resolved">resolved</option>
-            <option value="dismissed">dismissed</option>
+            <option value="open">Открыта</option>
+            <option value="reviewing">На рассмотрении</option>
+            <option value="resolved">Закрыта</option>
+            <option value="dismissed">Отклонена</option>
           </select>
         </div>
         <div>
@@ -204,7 +224,10 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
           <select
             className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
             value={reasonFilter}
-            onChange={(e) => setReasonFilter(e.target.value)}
+            onChange={(e) => {
+              setReasonFilter(e.target.value);
+              setPage(1);
+            }}
           >
             <option value="">Все</option>
             {filteredReasons.map((x) => (
@@ -219,7 +242,10 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
           <input
             className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-1.5 text-sm text-slate-100"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
             placeholder="ключевые слова…"
           />
         </div>
@@ -247,6 +273,14 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
       {loading ? (
         <p className="mt-8 text-slate-400">Загрузка...</p>
       ) : (
+        <>
+        {reports.length === 0 ? (
+          <p className="mt-8 text-sm text-slate-500">
+            {channelFilter.trim()
+              ? "Канал найден, жалоб по нему нет (или все отфильтрованы вкладками и полем «Поиск по тексту»)."
+              : "Нет жалоб по выбранным фильтрам."}
+          </p>
+        ) : (
         <ul className="mt-8 space-y-3">
           {reports.map((r) => (
             <li
@@ -261,7 +295,7 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
                     <span className="font-mono text-cyan-200/90">{r.target_id}</span>
                   </p>
                   <p className="text-xs text-slate-400">
-                    Причина: {reportReasonLabel(r.reason_code)} ({r.status})
+                    Причина: {reportReasonLabel(r.reason_code)} ({reportStatusLabelRu(r.status)})
                   </p>
                   {r.details ? <p className="mt-2 text-slate-300">{r.details}</p> : null}
                 </div>
@@ -315,6 +349,38 @@ export function AdminReportsSection({ viewerRole }: { viewerRole: string | null 
             </li>
           ))}
         </ul>
+        )}
+        {total > 0 ? (
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
+            <p className="text-sm text-slate-500">
+              Всего: {total}
+              {total > pageSize
+                ? ` · стр. ${page} из ${Math.max(1, Math.ceil(total / pageSize))}`
+                : null}
+            </p>
+            {total > pageSize ? (
+              <>
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= Math.ceil(total / pageSize)}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Вперёд
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        </>
       )}
     </div>
   );

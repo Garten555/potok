@@ -12,21 +12,48 @@ export type UnfreezeRequestRow = {
   unfreeze_request_status: string;
 };
 
-/** Список заявок на разморозку (только admin). */
-export async function GET() {
+const STATUS_FILTERS = ["pending", "approved", "rejected", "all"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+/** Список заявок на разморозку (только admin). Query: status=pending|approved|rejected|all, q=подстрока ника/названия (от 2 символов). */
+export async function GET(req: Request) {
   const gate = await requireAdmin();
   if (gate instanceof NextResponse) return gate;
 
+  const url = new URL(req.url);
+  const rawStatus = (url.searchParams.get("status") ?? "pending").toLowerCase();
+  const statusFilter: StatusFilter = STATUS_FILTERS.includes(rawStatus as StatusFilter)
+    ? (rawStatus as StatusFilter)
+    : "pending";
+  const q = (url.searchParams.get("q") ?? "").trim();
+
   const svc = createSupabaseServiceClient();
-  const { data, error } = await svc
+
+  let query = svc
     .from("users")
     .select(
       "id, channel_name, channel_handle, account_frozen_at, unfreeze_request_message, unfreeze_request_at, unfreeze_request_status",
     )
-    .eq("unfreeze_request_status", "pending")
-    .not("account_frozen_at", "is", null)
-    .order("unfreeze_request_at", { ascending: false })
-    .limit(100);
+    .order("unfreeze_request_at", { ascending: false, nullsFirst: false })
+    .limit(200);
+
+  if (statusFilter === "pending") {
+    query = query.eq("unfreeze_request_status", "pending").not("account_frozen_at", "is", null);
+  } else if (statusFilter === "rejected") {
+    query = query.eq("unfreeze_request_status", "rejected").not("account_frozen_at", "is", null);
+  } else if (statusFilter === "approved") {
+    query = query.eq("unfreeze_request_status", "approved");
+  } else {
+    query = query.in("unfreeze_request_status", ["pending", "rejected", "approved"]);
+  }
+
+  if (q.length >= 2) {
+    const safe = q.replace(/[%_]/g, "").slice(0, 80);
+    const like = `%${safe}%`;
+    query = query.or(`channel_name.ilike.${like},channel_handle.ilike.${like}`);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

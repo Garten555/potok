@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import { requireStaff } from "@/lib/server/staff-auth";
+import type {
+  ModerationReportRow,
+  ModerationReportsListErrorBody,
+  ModerationReportsListResponse,
+} from "@/lib/moderation-reports-types";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type ReportRow = Record<string, unknown>;
+type ReportRecord = Record<string, unknown>;
+
+function jsonError(message: string, status: number) {
+  const body: ModerationReportsListErrorBody = { error: message };
+  return NextResponse.json(body, { status });
+}
 
 export async function GET(req: Request) {
   const gate = await requireStaff();
@@ -18,6 +28,8 @@ export async function GET(req: Request) {
   const targetType = url.searchParams.get("target_type") ?? "";
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
   const channelRaw = (url.searchParams.get("channel") ?? "").trim();
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(5, parseInt(url.searchParams.get("limit") ?? "20", 10) || 20));
 
   const svc = createSupabaseServiceClient();
 
@@ -26,25 +38,47 @@ export async function GET(req: Request) {
     if (channelRaw.startsWith("@")) {
       const handle = channelRaw.slice(1).replace(/[%_]/g, "").slice(0, 80);
       if (handle.length < 1) {
-        return NextResponse.json({ error: "Укажите ник после @" }, { status: 400 });
+        return jsonError("Укажите ник после @", 400);
       }
       const { data: u } = await svc.from("users").select("id").ilike("channel_handle", handle).maybeSingle();
       channelUserId = (u as { id?: string } | null)?.id ?? null;
     } else if (UUID_RE.test(channelRaw)) {
       channelUserId = channelRaw;
     } else {
-      return NextResponse.json(
-        { error: "Канал: UUID владельца или @handle (например @mychannel)" },
-        { status: 400 },
-      );
+      const term = channelRaw.replace(/[%_]/g, "").trim().slice(0, 120);
+      if (term.length < 2) {
+        return jsonError("Для поиска по названию канала нужно минимум 2 символа (или UUID / @handle)", 400);
+      }
+      const like = `%${term}%`;
+      const [byName, byHandle] = await Promise.all([
+        svc.from("users").select("id").ilike("channel_name", like),
+        svc.from("users").select("id").ilike("channel_handle", like),
+      ]);
+      const nameErr = byName.error;
+      const handleErr = byHandle.error;
+      if (nameErr || handleErr) {
+        return jsonError(nameErr?.message ?? handleErr?.message ?? "Ошибка запроса", 400);
+      }
+      const rows = [...(byName.data ?? []), ...(byHandle.data ?? [])];
+      const uniqIds = [...new Set(rows.map((r) => (r as { id: string }).id))];
+      if (uniqIds.length === 0) {
+        return jsonError("Канал не найден по названию или нику (проверьте написание)", 404);
+      }
+      if (uniqIds.length > 1) {
+        return jsonError(
+          `Найдено несколько каналов (${uniqIds.length}) по этой подстроке. Уточните @handle или UUID владельца.`,
+          400,
+        );
+      }
+      channelUserId = uniqIds[0];
     }
     if (!channelUserId) {
-      return NextResponse.json({ error: "Канал с таким @handle не найден" }, { status: 404 });
+      return jsonError("Канал с таким @handle не найден", 404);
     }
   }
 
   /** Жалобы, связанные с каналом: на сам канал, на ролики канала, на комментарии под этими роликами. */
-  async function reportsForChannel(ownerId: string): Promise<ReportRow[]> {
+  async function reportsForChannel(ownerId: string): Promise<ReportRecord[]> {
     const { data: videos } = await svc.from("videos").select("id").eq("user_id", ownerId);
     const videoIds = (videos ?? []).map((v) => (v as { id: string }).id);
 
@@ -57,7 +91,7 @@ export async function GET(req: Request) {
     const videoPromise =
       videoIds.length > 0
         ? svc.from("reports").select("*").eq("target_type", "video").in("target_id", videoIds)
-        : Promise.resolve({ data: [] as ReportRow[] });
+        : Promise.resolve({ data: [] as ReportRecord[] });
 
     const commentsPromise =
       videoIds.length > 0
@@ -69,12 +103,12 @@ export async function GET(req: Request) {
     const commentPromise =
       commentIds.length > 0
         ? svc.from("reports").select("*").eq("target_type", "comment").in("target_id", commentIds)
-        : Promise.resolve({ data: [] as ReportRow[] });
+        : Promise.resolve({ data: [] as ReportRecord[] });
 
     const { data: commentReports } = await commentPromise;
 
     const merged = [...(chReports ?? []), ...(vr.data ?? []), ...(commentReports ?? [])];
-    const uniq = new Map<string, ReportRow>();
+    const uniq = new Map<string, ReportRecord>();
     for (const r of merged) {
       const id = String((r as { id: string }).id);
       uniq.set(id, r);
@@ -86,7 +120,7 @@ export async function GET(req: Request) {
     );
   }
 
-  let list: ReportRow[];
+  let list: ReportRecord[];
 
   if (channelUserId) {
     list = await reportsForChannel(channelUserId);
@@ -103,7 +137,7 @@ export async function GET(req: Request) {
     }
     const { data: rows, error } = await query;
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return jsonError(error.message, 400);
     }
     list = rows ?? [];
   }
@@ -132,5 +166,17 @@ export async function GET(req: Request) {
     });
   }
 
-  return NextResponse.json({ reports: list, viewerRole, channel_filter: channelUserId });
+  const total = list.length;
+  const start = (page - 1) * limit;
+  const paginated = list.slice(start, start + limit);
+
+  const body: ModerationReportsListResponse = {
+    reports: paginated as ModerationReportRow[],
+    total,
+    page,
+    pageSize: limit,
+    viewerRole,
+    channel_filter: channelUserId,
+  };
+  return NextResponse.json(body);
 }

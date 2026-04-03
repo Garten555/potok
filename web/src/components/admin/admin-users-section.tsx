@@ -1,9 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { BadgeCheck } from "lucide-react";
+
+const ROLE_LABELS_RU: Record<string, string> = {
+  user: "Пользователь",
+  moderator: "Модератор",
+  admin: "Администратор",
+};
+
+function roleLabelRu(role: string | null | undefined): string {
+  const r = role ?? "user";
+  return ROLE_LABELS_RU[r] ?? r;
+}
 
 type UserRow = {
   id: string;
@@ -24,6 +35,52 @@ export function AdminUsersSection() {
   const [verifySaving, setVerifySaving] = useState(false);
   const [roleFilter, setRoleFilter] = useState<"all" | "user" | "moderator" | "admin">("all");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "yes" | "no">("all");
+
+  const [browsePage, setBrowsePage] = useState(1);
+  const [browseRole, setBrowseRole] = useState<"all" | "user" | "moderator" | "admin">("all");
+  const [browseVerified, setBrowseVerified] = useState<"all" | "yes" | "no">("all");
+  const [browseQ, setBrowseQ] = useState("");
+  /** Подстрока поиска, уходящая в API (обновляется по «Применить» / Enter). */
+  const [browseQApplied, setBrowseQApplied] = useState("");
+  const [browseUsers, setBrowseUsers] = useState<UserRow[]>([]);
+  const [browseTotal, setBrowseTotal] = useState(0);
+  const [browseLoading, setBrowseLoading] = useState(true);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const browsePageSize = 20;
+
+  const loadBrowse = useCallback(async () => {
+    setBrowseLoading(true);
+    setBrowseError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(browsePage));
+      params.set("limit", String(browsePageSize));
+      if (browseRole !== "all") params.set("role", browseRole);
+      if (browseVerified !== "all") params.set("verified", browseVerified);
+      const t = browseQApplied.trim();
+      if (t.length >= 2) params.set("q", t);
+      const res = await fetch(`/api/admin/users-browse?${params.toString()}`);
+      const j = (await res.json()) as { users?: UserRow[]; total?: number; error?: string };
+      if (!res.ok) {
+        setBrowseUsers([]);
+        setBrowseTotal(0);
+        setBrowseError(j.error ?? `Ошибка ${res.status}`);
+        return;
+      }
+      setBrowseUsers(j.users ?? []);
+      setBrowseTotal(typeof j.total === "number" ? j.total : j.users?.length ?? 0);
+    } catch {
+      setBrowseUsers([]);
+      setBrowseTotal(0);
+      setBrowseError("Сеть недоступна");
+    } finally {
+      setBrowseLoading(false);
+    }
+  }, [browsePage, browseRole, browseVerified, browseQApplied, browsePageSize]);
+
+  useEffect(() => {
+    void loadBrowse();
+  }, [loadBrowse]);
 
   const search = async () => {
     const term = q.trim();
@@ -111,10 +168,141 @@ export function AdminUsersSection() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Пользователи</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Поиск по UUID пользователя, @handle или части ника. Для точного UUID показываем карточку и email из auth (если
-        доступен service role на сервере).
+        Ниже — список пользователей с фильтрами и страницами. Отдельно: точный поиск по UUID, @handle или части ника;
+        для точного UUID показываем карточку и email из auth (если доступен service role на сервере).
       </p>
 
+      <div className="mt-6 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
+        <h2 className="text-sm font-medium text-cyan-100/90">Список пользователей</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Фильтры по роли и верификации; в поле «Подстрока» — от 2 символов по нику или @handle (или оставьте пустым для
+          всех).
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-xs text-slate-500">Роль</label>
+            <select
+              className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
+              value={browseRole}
+              onChange={(e) => {
+                setBrowseRole(e.target.value as typeof browseRole);
+                setBrowsePage(1);
+              }}
+            >
+              <option value="all">Все</option>
+              <option value="user">Пользователь</option>
+              <option value="moderator">Модератор</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Верификация</label>
+            <select
+              className="mt-1 rounded-lg border border-white/10 bg-[#0b1120] px-2 py-1.5 text-sm text-slate-100"
+              value={browseVerified}
+              onChange={(e) => {
+                setBrowseVerified(e.target.value as typeof browseVerified);
+                setBrowsePage(1);
+              }}
+            >
+              <option value="all">Все</option>
+              <option value="yes">С галочкой</option>
+              <option value="no">Без галочки</option>
+            </select>
+          </div>
+          <div className="min-w-[200px] flex-1">
+            <label className="text-xs text-slate-500">Подстрока ника / handle</label>
+            <input
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-1.5 text-sm text-slate-100"
+              value={browseQ}
+              onChange={(e) => setBrowseQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setBrowseQApplied(browseQ.trim());
+                  setBrowsePage(1);
+                }
+              }}
+              placeholder="от 2 символов или пусто"
+            />
+          </div>
+          <button
+            type="button"
+            className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-sm text-cyan-100"
+            onClick={() => {
+              setBrowseQApplied(browseQ.trim());
+              setBrowsePage(1);
+            }}
+          >
+            Применить
+          </button>
+        </div>
+
+        {browseError ? <p className="mt-3 text-sm text-rose-300/90">{browseError}</p> : null}
+        {browseLoading ? (
+          <p className="mt-4 text-sm text-slate-500">Загрузка…</p>
+        ) : (
+          <>
+            <ul className="mt-4 space-y-2">
+              {browseUsers.map((u) => (
+                <li
+                  key={u.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#0b1120]/80 px-4 py-3 text-sm"
+                >
+                  <div>
+                    <span className="font-medium text-slate-100">{u.channel_name ?? "—"}</span>{" "}
+                    {u.channel_verified ? (
+                      <BadgeCheck className="inline h-4 w-4 align-middle text-cyan-400" aria-hidden />
+                    ) : null}{" "}
+                    {u.channel_handle ? (
+                      <span className="text-cyan-200/80">@{u.channel_handle}</span>
+                    ) : null}
+                    <span className="ml-2 text-xs text-slate-500">{roleLabelRu(u.role)}</span>
+                  </div>
+                  {u.channel_handle ? (
+                    <Link href={`/@${u.channel_handle}`} className="text-xs text-cyan-300 hover:underline">
+                      Канал
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {browseTotal > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
+                <p className="text-sm text-slate-500">
+                  Всего: {browseTotal}
+                  {browseTotal > browsePageSize
+                    ? ` · стр. ${browsePage} из ${Math.max(1, Math.ceil(browseTotal / browsePageSize))}`
+                    : null}
+                </p>
+                {browseTotal > browsePageSize ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={browsePage <= 1}
+                      className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
+                      onClick={() => setBrowsePage((p) => Math.max(1, p - 1))}
+                    >
+                      Назад
+                    </button>
+                    <button
+                      type="button"
+                      disabled={browsePage >= Math.ceil(browseTotal / browsePageSize)}
+                      className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
+                      onClick={() => setBrowsePage((p) => p + 1)}
+                    >
+                      Вперёд
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">Нет записей по выбранным условиям.</p>
+            )}
+          </>
+        )}
+      </div>
+
+      <h2 className="mt-10 text-lg font-medium text-slate-200">Точный поиск</h2>
       <div className="mt-6 flex flex-wrap items-end gap-3">
         <div className="min-w-[240px] flex-1">
           <label className="text-xs text-slate-500">Запрос</label>
@@ -160,7 +348,7 @@ export function AdminUsersSection() {
               <dl className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
                 <div>
                   <dt className="text-slate-500">Роль</dt>
-                  <dd className="text-slate-200">{single.user.role ?? "—"}</dd>
+                  <dd className="text-slate-200">{roleLabelRu(single.user.role)}</dd>
                 </div>
                 <div>
                   <dt className="text-slate-500">Бан до</dt>
@@ -217,9 +405,9 @@ export function AdminUsersSection() {
                   onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
                 >
                   <option value="all">Все</option>
-                  <option value="user">user</option>
-                  <option value="moderator">moderator</option>
-                  <option value="admin">admin</option>
+                  <option value="user">Пользователь</option>
+                  <option value="moderator">Модератор</option>
+                  <option value="admin">Администратор</option>
                 </select>
               </div>
               <div>
@@ -255,7 +443,7 @@ export function AdminUsersSection() {
                   {u.channel_handle ? (
                     <span className="text-cyan-200/80">@{u.channel_handle}</span>
                   ) : null}
-                  <span className="ml-2 text-xs text-slate-500">{u.role}</span>
+                  <span className="ml-2 text-xs text-slate-500">{roleLabelRu(u.role)}</span>
                 </div>
                 {u.channel_handle ? (
                   <Link href={`/@${u.channel_handle}`} className="text-xs text-cyan-300 hover:underline">

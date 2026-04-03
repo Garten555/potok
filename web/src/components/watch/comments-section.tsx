@@ -6,7 +6,7 @@ import { createPusherClient } from "@/lib/pusher/client";
 import { triggerPusherEvent } from "@/lib/pusher/trigger";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ReportDialog } from "@/components/report/report-dialog";
-import { Heart, MessageCircle, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import clsx from "clsx";
 
 type CommentRow = {
@@ -34,14 +34,19 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   /** Сервер уже знает сессию (viewerId); клиентский getUser иногда отстаёт — не прячем форму. */
   const [isAuth, setIsAuth] = useState(() => Boolean(viewerId));
   const pusher = useMemo(() => createPusherClient(), []);
 
   const isStaff = viewerRole === "moderator" || viewerRole === "admin";
   const isOwner = Boolean(viewerId && viewerId === videoOwnerId);
+  /** Вложенность ответов (0 = корень). */
+  const MAX_REPLY_DEPTH = 6;
 
   const loadComments = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
@@ -186,8 +191,16 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     const supabase = createSupabaseBrowserClient();
     const { error: delErr } = await supabase.from("comments").delete().eq("id", commentId);
     if (delErr) {
-      setError("Не удалось удалить.");
+      setError("Не удалось удалить. Если вы автор канала — проверьте, что в Supabase применена миграция 28_comments_rls_owner_delete.sql.");
       return;
+    }
+    if (replyTo === commentId) {
+      setReplyTo(null);
+      setText("");
+    }
+    if (editingId === commentId) {
+      setEditingId(null);
+      setEditText("");
     }
     await loadComments();
     await triggerPusherEvent({
@@ -195,6 +208,38 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
       event: "comments:updated",
       payload: { videoId },
     });
+  };
+
+  const onSaveEdit = async (commentId: string) => {
+    const normalized = editText.trim();
+    if (!normalized) {
+      setError("Комментарий не может быть пустым.");
+      return;
+    }
+    if (normalized.length > 1500) {
+      setError("Комментарий слишком длинный.");
+      return;
+    }
+    try {
+      setIsSavingEdit(true);
+      setError("");
+      const supabase = createSupabaseBrowserClient();
+      const { error: updErr } = await supabase.from("comments").update({ content: normalized }).eq("id", commentId);
+      if (updErr) {
+        setError("Не удалось сохранить изменения.");
+        return;
+      }
+      setEditingId(null);
+      setEditText("");
+      await loadComments();
+      await triggerPusherEvent({
+        channel: `video-${videoId}`,
+        event: "comments:updated",
+        payload: { videoId },
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const toggleHeart = async (commentId: string) => {
@@ -233,19 +278,24 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     };
   }, [pusher, videoId, loadComments]);
 
-  const renderComment = (item: CommentRow, depth: 0 | 1) => {
+  const renderComment = (item: CommentRow, depth: number) => {
     const author = Array.isArray(item.users) ? item.users[0] : item.users;
     const canDelete =
       Boolean(viewerId) &&
       (viewerId === item.user_id || isOwner || isStaff);
+    const canEditOwn = Boolean(viewerId && viewerId === item.user_id);
     const showHeart = isOwner;
+    const showReport = Boolean(viewerId && viewerId !== item.user_id);
+    const children = grouped.byParent.get(item.id) ?? [];
+    const isEditing = editingId === item.id;
+    const showReplyForm = isAuth && replyTo === item.id;
 
     return (
       <article
         key={item.id}
         className={clsx(
           "rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5",
-          depth === 1 ? "ml-6 border-l border-cyan-400/20" : "",
+          depth > 0 ? "ml-3 border-l border-cyan-400/25 sm:ml-6" : "",
         )}
       >
         <div className="flex items-start justify-between gap-2">
@@ -256,14 +306,23 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
               className="!h-9 !w-9 !text-sm shrink-0"
             />
             <div className="min-w-0 flex-1">
-            <p className="text-xs text-cyan-200/90">{author?.channel_name ?? "Пользователь"}</p>
-            {hearts.has(item.id) ? (
-              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-rose-300/90">
-                Сердце автора
-              </p>
-            ) : null}
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{item.content}</p>
-            <p className="mt-1 text-xs text-slate-500">{new Date(item.created_at).toLocaleString("ru-RU")}</p>
+              <p className="text-xs text-cyan-200/90">{author?.channel_name ?? "Пользователь"}</p>
+              {hearts.has(item.id) ? (
+                <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-rose-300/90">
+                  Сердце автора
+                </p>
+              ) : null}
+              {isEditing ? (
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={3}
+                  className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
+                />
+              ) : (
+                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{item.content}</p>
+              )}
+              <p className="mt-1 text-xs text-slate-500">{new Date(item.created_at).toLocaleString("ru-RU")}</p>
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
@@ -286,12 +345,15 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {isAuth && depth === 0 ? (
+          {isAuth && depth < MAX_REPLY_DEPTH && !isEditing ? (
             <button
               type="button"
               className="inline-flex items-center gap-1 text-xs text-cyan-200/90 hover:underline"
               onClick={() => {
                 setReplyTo(item.id);
+                setEditingId(null);
+                setEditText("");
+                setText("");
                 setError("");
               }}
             >
@@ -299,12 +361,49 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
               Ответить
             </button>
           ) : null}
-          {isAuth ? (
+          {canEditOwn && !isEditing ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs text-slate-300 hover:underline"
+              onClick={() => {
+                setEditingId(item.id);
+                setEditText(item.content);
+                setReplyTo(null);
+                setError("");
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Изменить
+            </button>
+          ) : null}
+          {canEditOwn && isEditing ? (
+            <>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                className="inline-flex items-center gap-1 text-xs text-cyan-200/90 hover:underline disabled:opacity-50"
+                onClick={() => void onSaveEdit(item.id)}
+              >
+                Сохранить
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-xs text-slate-400 hover:underline"
+                onClick={() => {
+                  setEditingId(null);
+                  setEditText("");
+                }}
+              >
+                Отмена
+              </button>
+            </>
+          ) : null}
+          {showReport ? (
             <div className="scale-90">
               <ReportDialog targetType="comment" targetId={item.id} label="Жалоба" />
             </div>
           ) : null}
-          {canDelete ? (
+          {canDelete && !isEditing ? (
             <button
               type="button"
               className="inline-flex items-center gap-1 text-xs text-rose-300/90 hover:underline"
@@ -316,9 +415,44 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
           ) : null}
         </div>
 
-        {depth === 0 ? (
+        {showReplyForm ? (
+          <div className="mt-3 space-y-2 rounded-lg border border-cyan-400/25 bg-cyan-950/25 px-3 py-2.5">
+            <p className="text-xs text-cyan-100/90">Ваш ответ</p>
+            <textarea
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
+              placeholder="Напишите ответ"
+            />
+            {error && replyTo === item.id ? <p className="text-xs text-rose-300">{error}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void onSend()}
+                disabled={isSending}
+                className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
+              >
+                {isSending ? "Отправляем..." : "Отправить"}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-300 hover:bg-white/[0.06]"
+                onClick={() => {
+                  setReplyTo(null);
+                  setText("");
+                  setError("");
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {children.length > 0 ? (
           <div className="mt-3 space-y-2">
-            {(grouped.byParent.get(item.id) ?? []).map((reply) => renderComment(reply, 1))}
+            {children.map((child) => renderComment(child, depth + 1))}
           </div>
         ) : null}
       </article>
@@ -329,32 +463,41 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     <section>
       <h2 className="text-lg font-semibold text-slate-100">Комментарии</h2>
       {isAuth ? (
-        <div className="mt-3 space-y-2">
-          {replyTo ? (
-            <p className="text-xs text-slate-400">
-              Ответ на комментарий{" "}
-              <button type="button" className="text-cyan-300 underline" onClick={() => setReplyTo(null)}>
-                (отменить)
-              </button>
-            </p>
-          ) : null}
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
-            placeholder="Напишите комментарий"
-          />
-          {error ? <p className="text-xs text-rose-300">{error}</p> : null}
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={isSending}
-            className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
-          >
-            {isSending ? "Отправляем..." : replyTo ? "Отправить ответ" : "Отправить"}
-          </button>
-        </div>
+        !replyTo ? (
+          <div className="mt-3 space-y-2">
+            <textarea
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
+              placeholder="Напишите комментарий"
+            />
+            {error ? <p className="text-xs text-rose-300">{error}</p> : null}
+            <button
+              type="button"
+              onClick={() => void onSend()}
+              disabled={isSending}
+              className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
+            >
+              {isSending ? "Отправляем..." : "Отправить"}
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">
+            Ответ вводится в блоке под комментарием.{" "}
+            <button
+              type="button"
+              className="text-cyan-300 underline"
+              onClick={() => {
+                setReplyTo(null);
+                setText("");
+                setError("");
+              }}
+            >
+              Отменить ответ
+            </button>
+          </p>
+        )
       ) : (
         <p className="mt-3 text-sm text-slate-400">Войдите, чтобы оставить комментарий.</p>
       )}
