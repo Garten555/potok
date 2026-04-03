@@ -8,9 +8,9 @@ import { ExternalLink, KeyRound, Trash2, Video, UserCog, Wrench } from "lucide-r
 import { clearSearchHistory } from "@/lib/search-history";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { strongPasswordPairSchema } from "@/lib/password-validation";
+import { getPasswordValidationState, strongPasswordPairSchema } from "@/lib/password-validation";
+import { PasswordRequirementsPanel } from "@/components/password-requirements-panel";
 import { AccountFreezeSection } from "@/components/settings/account-freeze-section";
-import { MfaSettingsSection } from "@/components/settings/mfa-settings-section";
 
 export function SettingsContent() {
   const { isAuthenticated } = useAuthState();
@@ -25,7 +25,6 @@ export function SettingsContent() {
       {isAuthenticated ? (
         <>
           <AccountSecuritySection />
-          <MfaSettingsSection />
           <AccountFreezeSection />
         </>
       ) : null}
@@ -107,6 +106,14 @@ function AccountSecuritySection() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const passwordValidation = useMemo(() => getPasswordValidationState(password), [password]);
+  const confirmMismatch = confirm.length > 0 && password !== confirm;
+  const canSavePassword =
+    currentPassword.length > 0 &&
+    passwordValidation.isStrong &&
+    confirm.length > 0 &&
+    !confirmMismatch;
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => {
@@ -199,10 +206,21 @@ function AccountSecuritySection() {
             type={showPw ? "text" : "password"}
             autoComplete="new-password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2"
-            placeholder="Не короче 8 символов"
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setFeedback(null);
+            }}
+            className={clsx(
+              "mt-1 w-full rounded-xl border bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2",
+              password.length > 0 && !passwordValidation.isStrong ? "border-amber-400/35" : "border-white/10",
+            )}
+            placeholder="Латиница, цифра, спецсимвол, регистр…"
           />
+          {password.length > 0 ? (
+            <div className="mt-3">
+              <PasswordRequirementsPanel state={passwordValidation} />
+            </div>
+          ) : null}
         </div>
         <div>
           <label htmlFor="settings-confirm-password" className="text-xs text-slate-400">
@@ -213,9 +231,18 @@ function AccountSecuritySection() {
             type={showPw ? "text" : "password"}
             autoComplete="new-password"
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2"
+            onChange={(e) => {
+              setConfirm(e.target.value);
+              setFeedback(null);
+            }}
+            className={clsx(
+              "mt-1 w-full rounded-xl border bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2",
+              confirmMismatch ? "border-rose-400/45" : "border-white/10",
+            )}
           />
+          {confirmMismatch ? (
+            <p className="mt-1 text-xs text-rose-300/95">Пароли не совпадают.</p>
+          ) : null}
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
           <input
@@ -233,7 +260,7 @@ function AccountSecuritySection() {
         ) : null}
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || !canSavePassword}
           className="inline-flex w-full items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-4 py-2.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/25 disabled:opacity-60 sm:w-auto"
         >
           {busy ? "Сохранение…" : "Сохранить новый пароль"}

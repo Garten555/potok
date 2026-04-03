@@ -267,10 +267,6 @@ export default function AuthPage() {
   const [otpCode, setOtpCode] = useState("");
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
-  /** После пароля — второй фактор (TOTP), если включён в Supabase MFA. */
-  const [needsMfa, setNeedsMfa] = useState(false);
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
 
   const hasSupabaseEnv = useMemo(
     () =>
@@ -343,9 +339,6 @@ export default function AuthPage() {
     setShowConfirmPassword(false);
     setPendingEmail(null);
     setOtpCode("");
-    setNeedsMfa(false);
-    setMfaFactorId(null);
-    setMfaCode("");
   }, [mode]);
 
   const clearOtpFlow = () => {
@@ -409,43 +402,6 @@ export default function AuthPage() {
     }
   };
 
-  const handleMfaSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!mfaFactorId || !hasSupabaseEnv) return;
-    const code = mfaCode.replace(/\D/g, "");
-    if (code.length < 6) {
-      setError("Введите 6 цифр из приложения аутентификации.");
-      return;
-    }
-    setError("");
-    setMessage("");
-    try {
-      setIsSubmitting(true);
-      const supabase = createSupabaseBrowserClient();
-      const { data: challenge, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
-      if (chErr || !challenge?.id) {
-        setError(chErr?.message ?? "Не удалось запросить проверку кода.");
-        return;
-      }
-      const { error: vErr } = await supabase.auth.mfa.verify({
-        factorId: mfaFactorId,
-        challengeId: challenge.id,
-        code,
-      });
-      if (vErr) {
-        setError(getAuthErrorMessageRu(vErr.message));
-        return;
-      }
-      setNeedsMfa(false);
-      setMfaFactorId(null);
-      setMfaCode("");
-      router.push("/");
-      router.refresh();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setMessage("");
@@ -496,24 +452,6 @@ export default function AuthPage() {
         });
         if (loginError) {
           setError(getAuthErrorMessageRu(loginError.message));
-          return;
-        }
-
-        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (aalData?.currentLevel === "aal1" && aalData?.nextLevel === "aal2") {
-          const { data: facData } = await supabase.auth.mfa.listFactors();
-          const totpFactor = facData?.totp?.find((f) => f.status === "verified");
-          if (!totpFactor?.id) {
-            setError(
-              "Включена двухфакторная защита, но фактор не найден. Выйдите и обратитесь в поддержку или отключите MFA в настройках с другого сеанса.",
-            );
-            await supabase.auth.signOut();
-            return;
-          }
-          setMfaFactorId(totpFactor.id);
-          setNeedsMfa(true);
-          setMfaCode("");
-          setMessage("Введите одноразовый код из приложения (Google Authenticator и т.п.).");
           return;
         }
 
@@ -629,16 +567,14 @@ export default function AuthPage() {
               isSwitchingMode ? "translate-y-1 opacity-70" : "translate-y-0 opacity-100",
             )}
           >
-            {needsMfa
-              ? "Двухфакторная защита: введите одноразовый код."
-              : pendingEmail
-                ? "Введите код из письма — без перехода по ссылке."
-                : mode === "login"
-                  ? "Введите данные для входа в аккаунт."
-                  : "Заполните поля для создания аккаунта."}
+            {pendingEmail
+              ? "Введите код из письма — без перехода по ссылке."
+              : mode === "login"
+                ? "Введите данные для входа в аккаунт."
+                : "Заполните поля для создания аккаунта."}
           </p>
 
-          {!pendingEmail && !needsMfa ? (
+          {!pendingEmail ? (
             <div className="mt-5 grid grid-cols-2 rounded-xl border border-white/10 bg-[#0c1323] p-1">
               <button
                 type="button"
@@ -667,54 +603,7 @@ export default function AuthPage() {
             </div>
           ) : null}
 
-          {needsMfa ? (
-            <form className="mt-5 space-y-4" onSubmit={handleMfaSubmit}>
-              <label className="block space-y-1">
-                <span className="text-xs text-slate-400">Код аутентификатора (6 цифр)</span>
-                <input
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  placeholder="••••••"
-                  className="w-full rounded-xl border border-white/10 bg-[#0c1323] px-3 py-2.5 text-center text-lg tracking-[0.35em] text-slate-100 outline-none transition focus:border-cyan-400/55"
-                />
-              </label>
-              {error ? (
-                <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-                  {error}
-                </p>
-              ) : null}
-              {message ? (
-                <p className="rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-                  {message}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full rounded-xl border border-cyan-300/35 bg-cyan-500/20 py-2.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
-              >
-                {isSubmitting ? "Проверка…" : "Подтвердить вход"}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const supabase = createSupabaseBrowserClient();
-                  await supabase.auth.signOut();
-                  setNeedsMfa(false);
-                  setMfaFactorId(null);
-                  setMfaCode("");
-                  setMessage("");
-                  setError("");
-                }}
-                className="w-full text-sm text-slate-400 hover:text-slate-200"
-              >
-                Назад (выйти из сессии)
-              </button>
-            </form>
-          ) : pendingEmail ? (
+          {pendingEmail ? (
             <form className="mt-5 space-y-4" onSubmit={handleVerifyOtp}>
               <div>
                 <h3 className="text-lg font-semibold text-slate-100">Код из письма</h3>

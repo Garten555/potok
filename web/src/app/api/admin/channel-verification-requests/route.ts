@@ -15,13 +15,20 @@ export type ChannelVerificationRequestRow = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Список заявок на галочку (модератор/админ). Query: q — подстрока названия или @ника (от 2 символов). */
+const STATUS_FILTERS = ["pending", "rejected", "all"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+/** Список заявок на галочку (модератор/админ). Query: status=pending|rejected|all, q — подстрока (от 2 символов). */
 export async function GET(req: Request) {
   const gate = await requireStaff();
   if (gate instanceof NextResponse) return gate;
 
   const url = new URL(req.url);
   const rawQ = (url.searchParams.get("q") ?? "").trim();
+  const rawStatus = (url.searchParams.get("status") ?? "pending").toLowerCase();
+  const statusFilter: StatusFilter = STATUS_FILTERS.includes(rawStatus as StatusFilter)
+    ? (rawStatus as StatusFilter)
+    : "pending";
 
   const svc = createSupabaseServiceClient();
   let query = svc
@@ -29,9 +36,19 @@ export async function GET(req: Request) {
     .select(
       "id, channel_name, channel_handle, subscribers_count, channel_verification_request_message, channel_verification_request_at, channel_verification_request_status",
     )
-    .eq("channel_verification_request_status", "pending")
-    .order("channel_verification_request_at", { ascending: false, nullsFirst: false })
     .limit(200);
+
+  if (statusFilter === "pending") {
+    query = query
+      .eq("channel_verification_request_status", "pending")
+      .order("channel_verification_request_at", { ascending: false, nullsFirst: false });
+  } else if (statusFilter === "rejected") {
+    query = query.eq("channel_verification_request_status", "rejected").order("id", { ascending: false });
+  } else {
+    query = query
+      .in("channel_verification_request_status", ["pending", "rejected"])
+      .order("id", { ascending: false });
+  }
 
   if (rawQ.length >= 2) {
     const safe = rawQ.startsWith("@") ? rawQ.slice(1) : rawQ;

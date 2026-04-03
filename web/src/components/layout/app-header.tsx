@@ -313,7 +313,8 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
           />
         </Link>
 
-        <div className="hidden min-w-0 flex-1 justify-center px-0.5 sm:px-2 lg:flex">
+        {/* Поиск прижат к правой части шапки — без «дыры» между строкой поиска и иконками */}
+        <div className="hidden min-w-0 flex-1 justify-end px-0.5 sm:px-2 lg:flex">
           <div className="w-full max-w-2xl min-w-0">
             <Suspense
               fallback={
@@ -337,7 +338,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         </button>
 
         {isAuthenticated ? (
-          <div className="flex shrink-0 items-center justify-end gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
             <button
               ref={notificationsTriggerRef}
               type="button"
@@ -352,6 +353,28 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
             >
               <Bell className="h-4 w-4" />
             </button>
+            {isStaffRole(profile?.role) ? (
+              <Link
+                href="/admin/overview"
+                className={clsx(
+                  "grid h-9 w-9 shrink-0 place-items-center rounded-full border transition",
+                  "border-amber-400/45 bg-gradient-to-b from-amber-500/22 to-amber-950/40",
+                  "shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]",
+                  "hover:border-amber-300/55 hover:from-amber-500/30 hover:to-amber-900/45",
+                  "active:scale-[0.98]",
+                )}
+                title="Панель персонала"
+                aria-label="Панель персонала"
+              >
+                <Shield
+                  className={clsx(
+                    "h-4 w-4",
+                    isAdminRole(profile?.role) ? "text-amber-200" : "text-amber-100/90",
+                  )}
+                  aria-hidden
+                />
+              </Link>
+            ) : null}
             <button
               ref={profileMenuTriggerRef}
               type="button"
