@@ -170,15 +170,17 @@ export function AdminUsersSection() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Пользователи</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Список с фильтрами и страницами и точный поиск по <strong className="text-slate-300">@handle</strong> (как в URL
-        канала) или по части ника. При однозначном совпадении в «Точном поиске» показываются карточка и email из auth (если
-        на сервере есть service role). Вставлять UUID в поиск не нужно.
+        Просмотр списка с фильтрами и постраничной навигацией; точный поиск по{" "}
+        <strong className="text-slate-300">@handle</strong> (как в адресе канала) или по части имени. При однозначном
+        совпадении в блоке «Точный поиск» отображаются карточка пользователя и адрес email из учётной записи (если доступен
+        на сервере). Вводить UUID не требуется.
       </p>
 
       <div className="mt-6 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
         <h2 className="text-sm font-medium text-cyan-100/90">Список пользователей</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Фильтры по роли и верификации. Поиск — @handle или подстрока; пустое поле — весь список по остальным фильтрам.
+          Фильтры по роли и статусу верификации. Поиск: @handle или подстрока; если поле поиска пустое, применяются только
+          выбранные фильтры.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div>
@@ -209,8 +211,8 @@ export function AdminUsersSection() {
               }}
             >
               <option value="all">Все</option>
-              <option value="yes">С галочкой</option>
-              <option value="no">Без галочки</option>
+              <option value="yes">Верифицирован</option>
+              <option value="no">Не верифицирован</option>
             </select>
           </div>
           <div className="min-w-[200px] flex-1">
@@ -305,7 +307,7 @@ export function AdminUsersSection() {
         )}
       </div>
 
-      <h2 className="mt-10 text-lg font-medium text-slate-200">Точный поиск</h2>
+      <h2 className="mt-10 text-lg font-medium text-slate-200">Поиск пользователя</h2>
       <div className="mt-6 flex flex-wrap items-end gap-3">
         <div className="min-w-[240px] flex-1">
           <label className="text-xs text-slate-500">Поиск: @handle или подстрока</label>
@@ -379,7 +381,7 @@ export function AdminUsersSection() {
                     disabled={verifySaving}
                     onChange={(e) => void setVerified(single.user!, e.target.checked)}
                   />
-                  Верификация канала (галочка на сайте)
+                  Канал верифицирован на платформе
                 </label>
                 {verifySaving ? <span className="text-xs text-slate-500">Сохранение…</span> : null}
               </div>
@@ -422,8 +424,8 @@ export function AdminUsersSection() {
                   onChange={(e) => setVerifiedFilter(e.target.value as typeof verifiedFilter)}
                 >
                   <option value="all">Все</option>
-                  <option value="yes">С галочкой</option>
-                  <option value="no">Без галочки</option>
+                  <option value="yes">Верифицирован</option>
+                  <option value="no">Не верифицирован</option>
                 </select>
               </div>
             </div>

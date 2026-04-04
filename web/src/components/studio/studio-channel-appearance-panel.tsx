@@ -193,7 +193,7 @@ export function StudioChannelAppearancePanel() {
       <ChannelIdentityForm />
 
       <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
-        <h2 className="text-sm font-semibold text-cyan-100/95">Галочка верификации</h2>
+        <h2 className="text-sm font-semibold text-cyan-100/95">Верификация канала</h2>
         <p className="mt-1 text-xs text-slate-500">
           Официальная отметка на канале и у видео. Выдаётся модераторами после проверки. Когда на канале не меньше{" "}
           {CHANNEL_VERIFICATION_MIN_SUBSCRIBERS} подписчиков, можно отправить заявку с кратким описанием.
@@ -231,7 +231,7 @@ export function StudioChannelAppearancePanel() {
                     setVerificationDraft(e.target.value);
                     setVerificationError(null);
                   }}
-                  placeholder="Кратко опишите канал: тематика, почему нужна галочка…"
+                  placeholder="Тематика канала, аудитория и обоснование запроса на верификацию…"
                   disabled={verificationSending}
                 />
                 {verificationError ? (

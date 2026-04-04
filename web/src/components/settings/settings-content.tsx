@@ -3,14 +3,36 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, KeyRound, Trash2, Video, UserCog, Wrench } from "lucide-react";
 import { clearSearchHistory } from "@/lib/search-history";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getPasswordValidationState, strongPasswordPairSchema } from "@/lib/password-validation";
 import { PasswordRequirementsPanel } from "@/components/password-requirements-panel";
+import {
+  PasswordRepeatHint,
+  passwordRepeatBorderClass,
+  weakNewPasswordBorderClass,
+} from "@/components/password-repeat-hint";
 import { AccountFreezeSection } from "@/components/settings/account-freeze-section";
+
+/** Сообщения signInWithPassword (Supabase / GoTrue) в разных локалях. */
+function mapCurrentPasswordCheckError(message: string): string {
+  const m = message.toLowerCase();
+  if (
+    m.includes("invalid login credentials") ||
+    m.includes("invalid credentials") ||
+    m.includes("invalid email or password") ||
+    (m.includes("invalid") && (m.includes("password") || m.includes("credential")))
+  ) {
+    return "Неверный текущий пароль.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "Подтвердите email перед входом.";
+  }
+  return message;
+}
 
 export function SettingsContent() {
   const { isAuthenticated } = useAuthState();
@@ -106,11 +128,19 @@ function AccountSecuritySection() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  /** signInWithPassword после паузы в вводе (не на каждый символ). */
+  const [currentPwStatus, setCurrentPwStatus] = useState<"idle" | "checking" | "ok" | "bad">("idle");
+  const [currentPwMsg, setCurrentPwMsg] = useState<string | null>(null);
+  const currentPwCheckSeq = useRef(0);
 
   const passwordValidation = useMemo(() => getPasswordValidationState(password), [password]);
   const confirmMismatch = confirm.length > 0 && password !== confirm;
+  const confirmMatch = confirm.length > 0 && password === confirm;
+  /** Готово к сохранению по полю «повтор»: совпадение + сильный новый пароль. */
+  const confirmValidForSave = confirmMatch && passwordValidation.isStrong;
   const canSavePassword =
     currentPassword.length > 0 &&
+    currentPwStatus === "ok" &&
     passwordValidation.isStrong &&
     confirm.length > 0 &&
     !confirmMismatch;
@@ -120,6 +150,37 @@ function AccountSecuritySection() {
       setEmail(data.user?.email ?? null);
     });
   }, [supabase]);
+
+  useEffect(() => {
+    if (!email || currentPassword.length < 1) {
+      setCurrentPwStatus("idle");
+      setCurrentPwMsg(null);
+      return;
+    }
+    const seq = ++currentPwCheckSeq.current;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        if (seq !== currentPwCheckSeq.current) return;
+        setCurrentPwStatus("checking");
+        setCurrentPwMsg(null);
+        const { error: authErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: currentPassword,
+        });
+        if (seq !== currentPwCheckSeq.current) return;
+        if (authErr) {
+          setCurrentPwStatus("bad");
+          setCurrentPwMsg(mapCurrentPasswordCheckError(authErr.message));
+        } else {
+          setCurrentPwStatus("ok");
+          setCurrentPwMsg(null);
+        }
+      })();
+    }, 550);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [currentPassword, email, supabase]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -147,13 +208,8 @@ function AccountSecuritySection() {
     });
     if (authErr) {
       setBusy(false);
-      setFeedback({
-        kind: "err",
-        text:
-          authErr.message.includes("Invalid login") || authErr.message.includes("credentials")
-            ? "Неверный текущий пароль."
-            : authErr.message,
-      });
+      setCurrentPwStatus("bad");
+      setCurrentPwMsg(mapCurrentPasswordCheckError(authErr.message));
       return;
     }
     const { error } = await supabase.auth.updateUser({ password: pwParsed.data.password });
@@ -192,10 +248,38 @@ function AccountSecuritySection() {
             type={showPw ? "text" : "password"}
             autoComplete="current-password"
             value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2"
+            onChange={(e) => {
+              const v = e.target.value;
+              setCurrentPassword(v);
+              setFeedback(null);
+              setCurrentPwMsg(null);
+              setCurrentPwStatus("idle");
+            }}
+            className={clsx(
+              "mt-1 w-full rounded-xl border bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2",
+              currentPwStatus === "bad" ? "border-rose-400/50" : currentPwStatus === "ok" ? "border-emerald-400/40" : "border-white/10",
+            )}
             placeholder="Для смены пароля обязателен"
+            aria-invalid={currentPwStatus === "bad"}
+            aria-describedby="settings-current-password-hint"
           />
+          <p
+            id="settings-current-password-hint"
+            className="mt-1.5 min-h-[1.25rem] text-xs"
+            aria-live="polite"
+          >
+            {currentPassword.length < 1 ? (
+              <span className="text-slate-500">Введите пароль — проверка через ~0,5 с после паузы в наборе.</span>
+            ) : currentPwStatus === "idle" ? (
+              <span className="text-slate-500">Сделайте паузу в наборе — проверка начнётся автоматически.</span>
+            ) : currentPwStatus === "checking" ? (
+              <span className="text-slate-400">Проверяем текущий пароль…</span>
+            ) : currentPwStatus === "ok" ? (
+              <span className="text-emerald-300/95">Текущий пароль верный.</span>
+            ) : (
+              <span className="text-rose-300/95">{currentPwMsg ?? "Неверный текущий пароль."}</span>
+            )}
+          </p>
         </div>
         <div>
           <label htmlFor="settings-new-password" className="text-xs text-slate-400">
@@ -212,7 +296,10 @@ function AccountSecuritySection() {
             }}
             className={clsx(
               "mt-1 w-full rounded-xl border bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2",
-              password.length > 0 && !passwordValidation.isStrong ? "border-amber-400/35" : "border-white/10",
+              weakNewPasswordBorderClass({
+                hasContent: password.length > 0,
+                isStrong: passwordValidation.isStrong,
+              }),
             )}
             placeholder="Латиница, цифра, спецсимвол, регистр…"
           />
@@ -237,12 +324,21 @@ function AccountSecuritySection() {
             }}
             className={clsx(
               "mt-1 w-full rounded-xl border bg-[#0c101c] px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring-2",
-              confirmMismatch ? "border-rose-400/45" : "border-white/10",
+              passwordRepeatBorderClass({
+                mismatch: confirmMismatch,
+                validForSave: confirmValidForSave,
+                match: confirmMatch,
+              }),
             )}
+            aria-invalid={confirmMismatch}
+            aria-describedby="settings-confirm-password-hint"
           />
-          {confirmMismatch ? (
-            <p className="mt-1 text-xs text-rose-300/95">Пароли не совпадают.</p>
-          ) : null}
+          <PasswordRepeatHint
+            confirm={confirm}
+            password={password}
+            passwordStrong={passwordValidation.isStrong}
+            hintId="settings-confirm-password-hint"
+          />
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500">
           <input

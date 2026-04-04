@@ -60,7 +60,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ requests: (data ?? []) as UnfreezeRequestRow[] });
+  return NextResponse.json(
+    { requests: (data ?? []) as UnfreezeRequestRow[] },
+    { headers: { "Cache-Control": "no-store, must-revalidate" } },
+  );
 }
 
 /** Одобрить или отклонить заявку на разморозку. */
@@ -132,5 +135,5 @@ export async function PATCH(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

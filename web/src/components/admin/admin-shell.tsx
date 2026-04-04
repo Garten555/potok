@@ -18,7 +18,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAdminStaff } from "@/components/admin/admin-staff-context";
-import { isAdminRole } from "@/lib/user-role";
+import { isAdminRole, isOwnerRole, staffRoleLabelRu } from "@/lib/user-role";
+import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 import {
   usePotokSidebarExpanded,
   useSidebarShowLabels,
@@ -39,7 +40,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const navItems: { href: string; label: string; Icon: typeof LayoutDashboard }[] = [
     { href: "/admin/overview", label: "Обзор", Icon: LayoutDashboard },
     { href: "/admin/reports", label: "Жалобы", Icon: Flag },
-    { href: "/admin/verification-requests", label: "Галочки", Icon: BadgeCheck },
+    { href: "/admin/verification-requests", label: "Верификация", Icon: BadgeCheck },
     ...(admin ? [{ href: "/admin/unfreeze", label: "Разморозка", Icon: Unlock }] : []),
     ...(admin ? [{ href: "/admin/team", label: "Модераторы", Icon: Users }] : []),
     { href: "/admin/users", label: "Пользователи", Icon: UserSearch },
@@ -54,18 +55,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           aria-label={mobileOpen ? "Закрыть меню" : "Открыть меню"}
           onClick={() => setMobileOpen((v) => !v)}
         >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {mobileOpen ? <X className={SIDEBAR_ICON_CLASS} /> : <Menu className={SIDEBAR_ICON_CLASS} />}
         </button>
         <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-amber-300/90" aria-hidden />
-          <span className="text-sm font-semibold tracking-wide text-amber-100/95">Персонал</span>
+          <Shield className={clsx(SIDEBAR_ICON_CLASS, "text-amber-300/90")} aria-hidden />
+          <span className="text-sm font-semibold tracking-wide text-amber-100/95">Админ-панель</span>
         </div>
         <Link
           href="/"
           className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-1.5 text-xs font-medium text-cyan-200/90"
         >
-          <Home className="h-3.5 w-3.5 shrink-0 opacity-90" />
-          На сайт
+          <Home className={clsx(SIDEBAR_ICON_CLASS, "opacity-90")} />
+          На главную
         </Link>
       </header>
 
@@ -83,7 +84,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           "fixed left-0 top-0 z-40 flex max-h-screen flex-col overflow-y-auto border-r border-amber-500/20 bg-gradient-to-b from-[#141008] via-[#0e0c12] to-[#08060a] shadow-[8px_0_40px_rgba(0,0,0,0.45)] transition-[transform,width] duration-300 ease-out",
           "max-lg:w-[min(18rem,92vw)] max-lg:px-0",
           mobileOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
-          "lg:pointer-events-auto lg:sticky lg:top-0 lg:z-0 lg:h-auto lg:max-h-none lg:translate-x-0 lg:shadow-none",
+          /* self-start + h-screen: иначе flex растягивает колонку на высоту main и sticky не «липнет» к вьюпорту */
+          "lg:pointer-events-auto lg:sticky lg:top-0 lg:z-0 lg:h-screen lg:max-h-screen lg:shrink-0 lg:self-start lg:translate-x-0 lg:shadow-none",
           expanded ? "lg:w-60 xl:w-64" : "lg:w-[4.8rem]",
         )}
       >
@@ -95,7 +97,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               aria-label={expanded ? "Свернуть меню" : "Развернуть меню"}
               onClick={toggleExpanded}
             >
-              <Menu className="h-4 w-4" />
+              <Menu className={SIDEBAR_ICON_CLASS} />
             </button>
             <Link
               href="/"
@@ -113,20 +115,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               !showLabels && "lg:hidden",
             )}
           >
-            <Shield className="h-4 w-4 shrink-0" />
-            <span>Панель персонала</span>
+            <Shield className={SIDEBAR_ICON_CLASS} />
+            <span>Панель управления</span>
           </p>
           {viewerRole ? (
             <span
               className={clsx(
                 "mt-2 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                 !showLabels && "lg:hidden",
-                admin
-                  ? "border border-amber-400/40 bg-amber-500/20 text-amber-100"
-                  : "border border-cyan-400/35 bg-cyan-500/15 text-cyan-100",
+                isOwnerRole(viewerRole)
+                  ? "border border-violet-400/40 bg-violet-500/20 text-violet-100"
+                  : admin
+                    ? "border border-amber-400/40 bg-amber-500/20 text-amber-100"
+                    : "border border-cyan-400/35 bg-cyan-500/15 text-cyan-100",
               )}
             >
-              {admin ? "Администратор" : "Модератор"}
+              {staffRoleLabelRu(viewerRole) ?? viewerRole}
             </span>
           ) : null}
         </div>
@@ -149,7 +153,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
                 )}
               >
-                <Icon className={clsx("h-[18px] w-[18px] shrink-0", active ? "text-amber-200" : "text-slate-500")} />
+                <Icon className={clsx(SIDEBAR_ICON_CLASS, active ? "text-amber-200" : "text-slate-500")} />
                 <span
                   className={clsx(
                     "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -167,28 +171,32 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             className={clsx(
-              "flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
-              showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
+              "flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Home className="h-[18px] w-[18px] shrink-0 text-slate-300" />
+            <Home className={clsx(SIDEBAR_ICON_CLASS, "text-slate-300")} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
                 showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
               )}
             >
-              На сайт
+              На главную
             </span>
           </Link>
           <Link
             href="/settings"
             className={clsx(
-              "mt-1 flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-200",
-              showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
+              "mt-1 flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-200",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Settings className="h-[18px] w-[18px] shrink-0" />
+            <Settings className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -204,16 +212,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="hidden border-b border-white/8 bg-[#0a0e18]/90 px-6 py-3 backdrop-blur lg:flex lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-amber-200/70">ПОТОК · персонал</p>
-            <p className="text-sm text-slate-500">Отдельная зона модерации и администрирования</p>
+            <p className="text-xs font-semibold text-amber-200/85">Администрирование платформы</p>
+            <p className="mt-0.5 text-sm text-slate-500">Модерация контента, учётные записи и заявки</p>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/"
               className="flex items-center gap-2 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20"
             >
-              <Home className="h-[18px] w-[18px] shrink-0 opacity-90" />
-              На сайт
+              <Home className={clsx(SIDEBAR_ICON_CLASS, "opacity-90")} />
+              На главную
             </Link>
           </div>
         </header>

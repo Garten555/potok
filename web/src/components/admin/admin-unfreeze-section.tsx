@@ -35,25 +35,30 @@ export function AdminUnfreezeSection() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [q, setQ] = useState("");
   const [qApplied, setQApplied] = useState("");
+  const [decidingUserId, setDecidingUserId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadUnfreeze = useCallback(async () => {
-    setLoading(true);
+  const loadUnfreeze = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set("status", statusFilter);
       const t = qApplied.trim();
       if (t.length >= 2) params.set("q", t);
-      const res = await fetch(`/api/admin/unfreeze-requests?${params.toString()}`);
+      const res = await fetch(`/api/admin/unfreeze-requests?${params.toString()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) {
-        setUnfreeze([]);
+        if (!silent) setUnfreeze([]);
         return;
       }
       const j = (await res.json()) as { requests?: UnfreezeRow[] };
       setUnfreeze(j.requests ?? []);
     } catch {
-      setUnfreeze([]);
+      if (!silent) setUnfreeze([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [statusFilter, qApplied]);
 
@@ -62,22 +67,41 @@ export function AdminUnfreezeSection() {
   }, [loadUnfreeze]);
 
   const decide = async (userId: string, decision: "approved" | "rejected") => {
-    const res = await fetch("/api/admin/unfreeze-requests", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, decision }),
-    });
-    if (res.ok) void loadUnfreeze();
+    setActionError(null);
+    setDecidingUserId(userId);
+    try {
+      const res = await fetch("/api/admin/unfreeze-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, decision }),
+        cache: "no-store",
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setActionError(j.error ?? `Ошибка ${res.status}`);
+        return;
+      }
+      setUnfreeze((prev) => prev.filter((row) => row.id !== userId));
+      await loadUnfreeze({ silent: true });
+    } finally {
+      setDecidingUserId(null);
+    }
   };
 
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Заявки на разморозку</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Пользователи с замороженным аккаунтом отправляют заявку. Одобрение снимает заморозку; отклонение оставляет аккаунт
-        замороженным. Поиск заявок — <strong className="text-slate-300">@handle</strong> или{" "}
-        <strong className="text-slate-300">подстрока</strong> ника (от 2 символов).
+        Пользователи с замороженным аккаунтом подают заявку на восстановление доступа. Одобрение снимает заморозку; при
+        отклонении аккаунт остаётся замороженным. Поиск заявок: <strong className="text-slate-300">@handle</strong> или{" "}
+        <strong className="text-slate-300">подстрока</strong> ника (не менее 2 символов).
       </p>
+
+      {actionError ? (
+        <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          {actionError}
+        </p>
+      ) : null}
 
       <div className="mt-6 flex flex-wrap gap-2">
         {STATUS_TAB_LABELS.map((tab) => (
@@ -99,7 +123,7 @@ export function AdminUnfreezeSection() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
-          <label className="text-xs text-slate-500">Поиск: UUID, @handle или подстрока</label>
+          <label className="text-xs text-slate-500">Поиск: @handle или подстрока ника</label>
           <input
             className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={q}
@@ -178,17 +202,19 @@ export function AdminUnfreezeSection() {
                     <>
                       <button
                         type="button"
-                        className="rounded-lg border border-emerald-300/30 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100"
+                        disabled={decidingUserId !== null}
+                        className="rounded-lg border border-emerald-300/30 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-45"
                         onClick={() => void decide(u.id, "approved")}
                       >
-                        Одобрить
+                        {decidingUserId === u.id ? "…" : "Одобрить"}
                       </button>
                       <button
                         type="button"
-                        className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-100"
+                        disabled={decidingUserId !== null}
+                        className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-100 disabled:opacity-45"
                         onClick={() => void decide(u.id, "rejected")}
                       >
-                        Отклонить
+                        {decidingUserId === u.id ? "…" : "Отклонить"}
                       </button>
                     </>
                   ) : null}

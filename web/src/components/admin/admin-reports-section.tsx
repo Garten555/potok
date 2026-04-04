@@ -92,7 +92,9 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
   };
 
   const banFromReport = async (r: ModerationReportRow) => {
-    const uid = window.prompt("@handle пользователя для бана (как в URL канала, с @ или без)");
+    const uid = window.prompt(
+      "@handle пользователя для блокировки (как в адресе канала, с символом @ или без)",
+    );
     if (!uid) return;
     const until = window.prompt("Дата окончания бана ISO, напр. 2099-12-31T00:00:00.000Z");
     if (!until) return;
@@ -141,10 +143,10 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Глобальная модерация: видео, комментарии и каналы. Фильтр по каналу — как везде в админке:{" "}
-        <strong className="text-slate-300">@handle</strong> или{" "}
-        <strong className="text-slate-300">подстрока</strong> ника (при однозначном совпадении подтянутся жалобы на канал, его
-        ролики и комментарии). Заметка при закрытии; бан по жалобе — только у администраторов.
+        Очередь жалоб по видео, комментариям и каналам. Фильтр по каналу: укажите{" "}
+        <strong className="text-slate-300">@handle</strong> или <strong className="text-slate-300">подстроку</strong> ника;
+        при однозначном совпадении показываются связанные с каналом жалобы, в том числе на публикации и комментарии. При
+        закрытии заявки можно добавить служебный комментарий. Блокировка пользователя по жалобе доступна администраторам.
       </p>
 
       <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">

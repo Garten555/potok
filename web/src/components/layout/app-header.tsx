@@ -1,16 +1,25 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, Clapperboard, LogIn, LogOut, Menu, Search, Settings, Shield, Tv } from "lucide-react";
+import { Bell, Clapperboard, LogIn, LogOut, Menu, Search, Settings, Shield, Tv, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuthState } from "@/components/auth/auth-context";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isAdminRole, isStaffRole } from "@/lib/user-role";
+import { SESSION_ROLE_CHANGED_EVENT } from "@/lib/session-role-events";
+import { isAdminRole, isOwnerRole, isStaffRole } from "@/lib/user-role";
 import { useSidebarState } from "@/components/layout/sidebar-context";
 import { SmartSearch } from "@/components/search/smart-search";
 import { MobileSearchOverlay } from "@/components/search/mobile-search-overlay";
+import { NOTIFICATIONS_REFRESH_EVENT } from "@/lib/notifications-events";
+import { createPusherClient } from "@/lib/pusher/client";
+import {
+  USER_NOTIFICATIONS_EVENT,
+  USER_SESSION_ROLE_EVENT,
+  userNotificationsChannelName,
+} from "@/lib/pusher/user-notifications";
 
 type HeaderProfile = {
   id: string;
@@ -59,6 +68,60 @@ function clearHeaderProfileCache() {
   }
 }
 
+type UserPublicRow = {
+  id: string;
+  channel_name: string | null;
+  channel_handle: string | null;
+  avatar_url: string | null;
+};
+
+/** Дополняем старые уведомления данными автора по fromUserId. */
+async function enrichNotificationActors(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  rows: NotificationRow[],
+): Promise<NotificationRow[]> {
+  const needIds = [
+    ...new Set(
+      rows
+        .filter((r) => {
+          if (r.type !== "comment_reply" && r.type !== "comment_author_heart") return false;
+          const d = r.data ?? {};
+          const hasName = typeof d.fromChannelName === "string" && String(d.fromChannelName).trim().length > 0;
+          return !hasName && typeof d.fromUserId === "string";
+        })
+        .map((r) => r.data.fromUserId as string),
+    ),
+  ];
+  if (needIds.length === 0) return rows;
+  const { data: users } = await supabase
+    .from("users")
+    .select("id, channel_name, channel_handle, avatar_url")
+    .in("id", needIds);
+  const map = new Map((users as UserPublicRow[] | null)?.map((u) => [u.id, u]) ?? []);
+  return rows.map((r) => {
+    if (r.type !== "comment_reply" && r.type !== "comment_author_heart") return r;
+    const uid = r.data?.fromUserId;
+    if (typeof uid !== "string") return r;
+    const u = map.get(uid);
+    if (!u) return r;
+    const d = r.data ?? {};
+    const nameOk = typeof d.fromChannelName === "string" && d.fromChannelName.trim().length > 0;
+    return {
+      ...r,
+      data: {
+        ...d,
+        fromChannelName: nameOk ? d.fromChannelName : u.channel_name,
+        fromAvatarUrl:
+          typeof d.fromAvatarUrl === "string" && d.fromAvatarUrl.length > 0 ? d.fromAvatarUrl : u.avatar_url,
+        fromChannelHandle:
+          typeof d.fromChannelHandle === "string" && d.fromChannelHandle.length > 0
+            ? d.fromChannelHandle
+            : u.channel_handle,
+      },
+    };
+  });
+}
+
 type AppHeaderProps = {
   /** true на главной: шапка без собственного sticky — блок с чипами оборачивает в один sticky. */
   embedded?: boolean;
@@ -66,6 +129,7 @@ type AppHeaderProps = {
 
 /** Верхняя шапка: как в концепте — бренд слева (иконка + ПОТОК), поиск, действия. Без второй строки. */
 export function AppHeader({ embedded = false }: AppHeaderProps) {
+  const router = useRouter();
   const { toggleSidebar } = useSidebarState();
   const { isAuthenticated } = useAuthState();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -74,6 +138,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [profile, setProfile] = useState<HeaderProfile | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const profileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const profileMenuPanelRef = useRef<HTMLDivElement | null>(null);
   const notificationsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -81,11 +146,33 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   const [profileMenuPos, setProfileMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [notificationsPos, setNotificationsPos] = useState<{ top: number; left: number } | null>(null);
   const [menusMounted, setMenusMounted] = useState(false);
+  const isNotificationsOpenRef = useRef(false);
+  isNotificationsOpenRef.current = isNotificationsOpen;
   const avatarFallback = useMemo(() => {
     const source = profile?.channel_name?.trim();
     if (!source) return "Ю";
     return source.slice(0, 1).toUpperCase();
   }, [profile?.channel_name]);
+
+  const refreshProfileFromServer = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return;
+    const { data: row } = await supabase
+      .from("users")
+      .select("id, channel_name, channel_handle, avatar_url, role")
+      .eq("id", uid)
+      .maybeSingle();
+    const roleRes = await fetch("/api/me/role", { credentials: "same-origin", cache: "no-store" });
+    const roleJson = roleRes.ok ? ((await roleRes.json()) as { role?: string | null }) : { role: null };
+    const role = roleJson.role ?? (row as HeaderProfile | null)?.role ?? null;
+    if (row) {
+      const merged: HeaderProfile = { ...(row as HeaderProfile), role };
+      setProfile(merged);
+      writeHeaderProfileCache(uid, merged);
+    }
+  }, []);
 
   useEffect(() => {
     setMenusMounted(true);
@@ -172,9 +259,10 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
         .eq("id", authUser.id)
         .maybeSingle();
 
-      const rolePromise = fetch("/api/me/role", { credentials: "same-origin" }).then((r) =>
-        r.ok ? r.json() : Promise.resolve({ role: null as string | null }),
-      );
+      const rolePromise = fetch("/api/me/role", {
+        credentials: "same-origin",
+        cache: "no-store",
+      }).then((r) => (r.ok ? r.json() : Promise.resolve({ role: null as string | null })));
 
       void usersPromise.then(({ data }) => {
         if (cancelled || !data) return;
@@ -232,6 +320,44 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshProfileFromServer();
+    };
+    window.addEventListener("focus", onVis);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onVis);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [isAuthenticated, refreshProfileFromServer]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const supabase = createSupabaseBrowserClient();
+    let cancelled = false;
+    let profileChannel: ReturnType<typeof supabase.channel> | null = null;
+    void supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user?.id;
+      if (!uid || cancelled) return;
+      profileChannel = supabase
+        .channel(`users-profile-${uid}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "users", filter: `id=eq.${uid}` },
+          () => {
+            void refreshProfileFromServer();
+          },
+        )
+        .subscribe();
+    });
+    return () => {
+      cancelled = true;
+      if (profileChannel) void supabase.removeChannel(profileChannel);
+    };
+  }, [isAuthenticated, refreshProfileFromServer]);
+
+  useEffect(() => {
     if (!isMenuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
       const t = event.target as Node;
@@ -255,21 +381,140 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
     return () => window.removeEventListener("mousedown", onPointerDown);
   }, [isNotificationsOpen]);
 
-  const loadNotifications = async () => {
-    setNotifications([]);
+  const refreshUnreadCount = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session?.user) {
+      setUnreadCount(0);
+      return;
+    }
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("is_read", false);
+    if (error) return;
+    setUnreadCount(count ?? 0);
+  }, []);
+
+  /** Только непрочитанные — просмотренные не «висят» в списке. */
+  const loadNotifications = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session?.user) {
+      setNotifications([]);
+      return;
+    }
     const { data } = await supabase
       .from("notifications")
       .select("id, type, data, is_read, created_at")
+      .eq("is_read", false)
       .order("created_at", { ascending: false })
       .limit(25);
-    setNotifications((data as NotificationRow[]) ?? []);
-  };
+    let rows = (data as NotificationRow[]) ?? [];
+    rows = await enrichNotificationActors(supabase, rows);
+    setNotifications(rows);
+  }, []);
+
+  const markNotificationRead = useCallback(
+    async (id: string) => {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+      if (!error) {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        void refreshUnreadCount();
+      }
+    },
+    [refreshUnreadCount],
+  );
+
+  const deleteNotification = useCallback(
+    async (id: string) => {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.from("notifications").delete().eq("id", id);
+      if (!error) {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        void refreshUnreadCount();
+      }
+    },
+    [refreshUnreadCount],
+  );
+
+  const markAllNotificationsRead = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("user_id", uid).eq("is_read", false);
+    if (!error) {
+      setNotifications([]);
+      void refreshUnreadCount();
+    }
+  }, [refreshUnreadCount]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setUnreadCount(0);
+      return;
+    }
+    const supabase = createSupabaseBrowserClient();
+    void refreshUnreadCount();
+    const onRefresh = () => void refreshUnreadCount();
+    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, onRefresh);
+
+    const pusher = createPusherClient();
+    let cancelled = false;
+    const channelNameRef = { current: null as string | null };
+    const handler = () => {
+      void refreshUnreadCount();
+      if (isNotificationsOpenRef.current) void loadNotifications();
+    };
+
+    const roleHandler = (data: unknown) => {
+      const payload = typeof data === "object" && data && "role" in data ? (data as { role?: string }) : {};
+      const nextRole = typeof payload.role === "string" ? payload.role : null;
+      if (!nextRole) return;
+      void supabase.auth.getSession().then(({ data: s }) => {
+        const uid = s.session?.user?.id;
+        if (!uid) return;
+        setProfile((prev) => {
+          if (!prev) return prev;
+          const merged = { ...prev, role: nextRole };
+          writeHeaderProfileCache(uid, merged);
+          return merged;
+        });
+        window.dispatchEvent(new CustomEvent(SESSION_ROLE_CHANGED_EVENT, { detail: { role: nextRole } }));
+      });
+    };
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const uid = data.session?.user?.id;
+      if (!uid) return;
+      const name = userNotificationsChannelName(uid);
+      channelNameRef.current = name;
+      const ch = pusher.subscribe(name);
+      ch.bind(USER_NOTIFICATIONS_EVENT, handler);
+      ch.bind(USER_SESSION_ROLE_EVENT, roleHandler);
+    });
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, onRefresh);
+      const name = channelNameRef.current;
+      channelNameRef.current = null;
+      if (name) {
+        const ch = pusher.channel(name);
+        ch?.unbind(USER_NOTIFICATIONS_EVENT, handler);
+        ch?.unbind(USER_SESSION_ROLE_EVENT, roleHandler);
+        pusher.unsubscribe(name);
+      }
+    };
+  }, [isAuthenticated, refreshUnreadCount, loadNotifications]);
 
   useEffect(() => {
     if (!isAuthenticated || !isNotificationsOpen) return;
     void loadNotifications();
-  }, [isAuthenticated, isNotificationsOpen]);
+  }, [isAuthenticated, isNotificationsOpen, loadNotifications]);
 
   const handleSignOut = async () => {
     try {
@@ -342,8 +587,10 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
             <button
               ref={notificationsTriggerRef}
               type="button"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10"
-              aria-label="Уведомления"
+              className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/12 bg-white/5 text-slate-300 transition hover:bg-white/10"
+              aria-label={
+                unreadCount > 0 ? `Уведомления, непрочитанных: ${unreadCount}` : "Уведомления"
+              }
               aria-expanded={isNotificationsOpen}
               aria-haspopup="menu"
               onClick={() => {
@@ -352,6 +599,11 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
               }}
             >
               <Bell className="h-4 w-4" />
+              {unreadCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[#0a0d14] bg-cyan-500 px-1 text-[10px] font-semibold leading-none text-[#0a1628]">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
             </button>
             {isStaffRole(profile?.role) ? (
               <Link
@@ -363,13 +615,17 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                   "hover:border-amber-300/55 hover:from-amber-500/30 hover:to-amber-900/45",
                   "active:scale-[0.98]",
                 )}
-                title="Панель персонала"
-                aria-label="Панель персонала"
+                title="Панель управления"
+                aria-label="Панель управления"
               >
                 <Shield
                   className={clsx(
                     "h-4 w-4",
-                    isAdminRole(profile?.role) ? "text-amber-200" : "text-amber-100/90",
+                    isOwnerRole(profile?.role)
+                      ? "text-violet-200"
+                      : isAdminRole(profile?.role)
+                        ? "text-amber-200"
+                        : "text-amber-100/90",
                   )}
                   aria-hidden
                 />
@@ -416,37 +672,107 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                   style={{ top: notificationsPos.top, left: notificationsPos.left }}
                   role="menu"
                 >
-                  <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
                     <p className="truncate text-sm font-medium text-slate-100">Уведомления</p>
+                    {notifications.length > 0 ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-[11px] font-medium text-cyan-300/95 underline-offset-2 hover:text-cyan-200 hover:underline"
+                        onClick={() => void markAllNotificationsRead()}
+                      >
+                        Прочитать все
+                      </button>
+                    ) : null}
                   </div>
                   <div className="max-h-72 space-y-1 overflow-auto pr-1">
                     {notifications.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-slate-400">Пока нет уведомлений</p>
+                      <p className="px-3 py-2 text-xs text-slate-400">Нет непрочитанных уведомлений</p>
                     ) : (
                       notifications.map((n) => {
                         const d = n.data ?? {};
                         const videoId = typeof d.videoId === "string" ? d.videoId : null;
-                        if (n.type === "comment_reply" && videoId) {
+                        if ((n.type === "comment_reply" || n.type === "comment_author_heart") && videoId) {
+                          const displayName =
+                            typeof d.fromChannelName === "string" && d.fromChannelName.trim()
+                              ? d.fromChannelName.trim()
+                              : typeof d.fromChannelHandle === "string" && d.fromChannelHandle.trim()
+                                ? `@${d.fromChannelHandle.trim()}`
+                                : "Пользователь";
+                          const avatarUrl = typeof d.fromAvatarUrl === "string" ? d.fromAvatarUrl : null;
+                          const initial = displayName.startsWith("@")
+                            ? displayName.slice(1, 2).toUpperCase()
+                            : displayName.slice(0, 1).toUpperCase();
+                          const isHeart = n.type === "comment_author_heart";
+                          const lineClass = isHeart
+                            ? "border border-rose-400/35 bg-rose-500/10 shadow-[inset_2px_0_0_0_rgba(244,63,94,0.65)]"
+                            : "border border-cyan-400/35 bg-cyan-500/10 shadow-[inset_2px_0_0_0_rgba(34,211,238,0.65)]";
+                          const subtitle = isHeart
+                            ? "Сердце от автора канала к вашему комментарию"
+                            : "Ответ на ваш комментарий";
+                          const subtitleColor = isHeart ? "text-rose-200/90" : "text-cyan-200/90";
                           return (
-                            <Link
-                              key={n.id}
-                              href={`/watch/${videoId}`}
-                              className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-white/[0.06]"
-                              onClick={() => setIsNotificationsOpen(false)}
-                            >
-                              <span className="font-medium text-cyan-100">Ответ на комментарий</span>
-                              <span className="mt-0.5 block text-[11px] text-slate-500">
-                                {new Date(n.created_at).toLocaleString("ru-RU")}
-                              </span>
-                            </Link>
+                            <div key={n.id} className={clsx("flex items-stretch gap-0.5 rounded-lg", lineClass)}>
+                              <button
+                                type="button"
+                                className="flex min-w-0 flex-1 gap-2.5 px-2.5 py-2 text-left text-xs text-slate-200 transition hover:bg-white/[0.06]"
+                                onClick={() => {
+                                  void (async () => {
+                                    await markNotificationRead(n.id);
+                                    setIsNotificationsOpen(false);
+                                    router.push(`/watch/${videoId}`);
+                                  })();
+                                }}
+                              >
+                                <span
+                                  className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/15 bg-gradient-to-br from-slate-600/40 to-slate-900/80 text-sm font-semibold text-slate-100"
+                                  style={
+                                    avatarUrl
+                                      ? {
+                                          backgroundImage: `url(${avatarUrl})`,
+                                          backgroundSize: "cover",
+                                          backgroundPosition: "center",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {avatarUrl ? null : initial || "?"}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-semibold text-slate-100">{displayName}</span>
+                                  <span className={clsx("mt-0.5 block text-[11px]", subtitleColor)}>{subtitle}</span>
+                                  <span className="mt-0.5 block text-[11px] text-slate-500">
+                                    {new Date(n.created_at).toLocaleString("ru-RU")}
+                                  </span>
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Удалить уведомление"
+                                className="grid w-9 shrink-0 place-items-center rounded-r-lg text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void deleteNotification(n.id);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
                           );
                         }
                         return (
                           <div
                             key={n.id}
-                            className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300"
+                            className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2 text-xs text-slate-300"
                           >
-                            {n.type}
+                            <span className="min-w-0 truncate">{n.type}</span>
+                            <button
+                              type="button"
+                              aria-label="Удалить уведомление"
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/15 hover:text-rose-200"
+                              onClick={() => void deleteNotification(n.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         );
                       })
@@ -499,10 +825,14 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                       <Shield
                         className={clsx(
                           "h-4 w-4",
-                          isAdminRole(profile?.role) ? "text-amber-200" : "text-cyan-200",
+                          isOwnerRole(profile?.role)
+                            ? "text-violet-200"
+                            : isAdminRole(profile?.role)
+                              ? "text-amber-200"
+                              : "text-cyan-200",
                         )}
                       />
-                      Панель персонала
+                      Панель управления
                     </Link>
                   ) : null}
                   <Link

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { frozenAccountJsonResponse } from "@/lib/assert-account-not-frozen";
 import { REPORT_REASON_CODES, type ReportReasonCode } from "@/lib/report-reasons";
 
 const ALLOWED = new Set<string>(REPORT_REASON_CODES.map((r) => r.code));
@@ -12,6 +13,9 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+
+  const frozenRes = await frozenAccountJsonResponse(supabase, user.id);
+  if (frozenRes) return frozenRes;
 
   let body: {
     target_type?: string;

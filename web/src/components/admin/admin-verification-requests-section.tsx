@@ -75,12 +75,12 @@ export function AdminVerificationRequestsSection() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="text-xl font-semibold text-slate-100">Заявки на галочку</h1>
+      <h1 className="text-xl font-semibold text-slate-100">Верификация каналов</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Авторы с достаточным числом подписчиков отправляют заявку из студии. Одобрение включает верификацию канала;
-        отклонение — автор может подать заявку снова. Поиск заявок — как везде в админке:{" "}
+        Заявки подаются из студии при достаточном числе подписчиков. Одобрение присваивает отметку верифицированного
+        канала; при отклонении автор может отправить заявку повторно. Поиск:{" "}
         <strong className="text-slate-300">@handle</strong> или <strong className="text-slate-300">подстрока</strong> ника
-        (от 2 символов).
+        (не короче 2 символов).
       </p>
 
       <div className="mt-5 flex flex-wrap gap-2">
@@ -198,7 +198,7 @@ export function AdminVerificationRequestsSection() {
                         )}
                         onClick={() => void decide(u.id, "approved")}
                       >
-                        Одобрить (галочка)
+                        Одобрить верификацию
                       </button>
                       <button
                         type="button"

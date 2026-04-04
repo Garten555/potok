@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import type { PasswordValidationState } from "@/lib/password-validation";
 
-/** Плашка «надёжность пароля» — те же правила, что при регистрации и сбросе пароля. */
+/** Плашка «надёжность пароля»: регистрация, сброс, настройки (единый компонент). */
 export function PasswordRequirementsPanel({ state }: { state: PasswordValidationState }) {
   return (
     <div className="rounded-xl border border-white/10 bg-[#0c1320]/90 p-3">

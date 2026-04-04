@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/app-header";
+import { ContentUnavailableStub } from "@/components/public-content/content-unavailable-stub";
 import { WatchPlayerLazy } from "@/components/watch/watch-player-lazy";
 import { CommentsSection } from "@/components/watch/comments-section";
+import { WatchMarkCommentNotificationsRead } from "@/components/watch/watch-mark-comment-notifications-read";
 import { RecommendationsPanel } from "@/components/watch/recommendations-panel";
 import { VideoMetaBlock } from "@/components/watch/video-meta-block";
 import { PlaylistWatchPanel } from "@/components/watch/playlist-watch-panel";
@@ -65,7 +67,9 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
     .eq("id", video.user_id)
     .maybeSingle();
   const ownerFrozen = Boolean((ownerRow as { account_frozen_at?: string | null } | null)?.account_frozen_at);
-  if (ownerFrozen && !isOwner) notFound();
+  if (ownerFrozen && !isOwner) {
+    return <ContentUnavailableStub kind="video" />;
+  }
 
   // Считаем просмотр максимум 1 раз на пользователя.
   if (viewer?.id) {
@@ -220,6 +224,7 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
 
   return (
     <div>
+      <WatchMarkCommentNotificationsRead videoId={video.id} />
       <AppHeader />
       <main className="w-full px-2 pb-10 pt-4 sm:px-4 sm:pt-4 lg:px-6">
         <div

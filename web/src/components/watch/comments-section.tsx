@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPusherClient } from "@/lib/pusher/client";
 import { triggerPusherEvent } from "@/lib/pusher/trigger";
+import { triggerUserNotificationChannel } from "@/lib/pusher/trigger-user-notification";
+import { SESSION_ROLE_CHANGED_EVENT } from "@/lib/session-role-events";
+import { isStaffRole, staffCanDeleteComment } from "@/lib/user-role";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ReportDialog } from "@/components/report/report-dialog";
 import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
@@ -16,8 +19,8 @@ type CommentRow = {
   user_id: string;
   parent_id: string | null;
   users?:
-    | { channel_name?: string | null; avatar_url?: string | null }
-    | Array<{ channel_name?: string | null; avatar_url?: string | null }>
+    | { channel_name?: string | null; avatar_url?: string | null; role?: string | null }
+    | Array<{ channel_name?: string | null; avatar_url?: string | null; role?: string | null }>
     | null;
 };
 
@@ -43,7 +46,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
   const [isAuth, setIsAuth] = useState(() => Boolean(viewerId));
   const pusher = useMemo(() => createPusherClient(), []);
 
-  const isStaff = viewerRole === "moderator" || viewerRole === "admin";
+  const isStaff = isStaffRole(viewerRole);
   const isOwner = Boolean(viewerId && viewerId === videoOwnerId);
   /** Вложенность ответов (0 = корень). */
   const MAX_REPLY_DEPTH = 6;
@@ -68,17 +71,21 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
       setLoadError("");
       const list = rows ?? [];
       const userIds = [...new Set(list.map((c) => c.user_id).filter(Boolean))];
-      const userMap = new Map<string, { channel_name?: string | null; avatar_url?: string | null }>();
+      const userMap = new Map<
+        string,
+        { channel_name?: string | null; avatar_url?: string | null; role?: string | null }
+      >();
       if (userIds.length > 0) {
         const { data: userRows, error: usersErr } = await supabase
           .from("users")
-          .select("id, channel_name, avatar_url")
+          .select("id, channel_name, avatar_url, role")
           .in("id", userIds);
         if (!usersErr && userRows) {
           for (const u of userRows as {
             id: string;
             channel_name?: string | null;
             avatar_url?: string | null;
+            role?: string | null;
           }[]) {
             userMap.set(u.id, u);
           }
@@ -162,6 +169,8 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
         return;
       }
 
+      const replyParentId = replyTo;
+
       const { error: insertError } = await supabase.from("comments").insert({
         video_id: videoId,
         user_id: user.id,
@@ -171,6 +180,14 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
       if (insertError) {
         setError(insertError.message.includes("banned") ? "Доступ ограничен." : "Не удалось отправить комментарий.");
         return;
+      }
+
+      if (replyParentId) {
+        const parent = comments.find((c) => c.id === replyParentId);
+        const parentAuthorId = parent?.user_id;
+        if (parentAuthorId && parentAuthorId !== user.id) {
+          void triggerUserNotificationChannel(parentAuthorId);
+        }
       }
 
       setText("");
@@ -242,7 +259,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     }
   };
 
-  const toggleHeart = async (commentId: string) => {
+  const toggleHeart = async (commentId: string, commentAuthorId: string) => {
     if (!isOwner) return;
     const supabase = createSupabaseBrowserClient();
     const has = hearts.has(commentId);
@@ -253,7 +270,12 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
         .eq("comment_id", commentId)
         .eq("video_owner_id", videoOwnerId);
     } else {
-      await supabase.from("comment_author_hearts").insert({ comment_id: commentId, video_owner_id: videoOwnerId });
+      const { error: insErr } = await supabase
+        .from("comment_author_hearts")
+        .insert({ comment_id: commentId, video_owner_id: videoOwnerId });
+      if (!insErr && commentAuthorId !== videoOwnerId) {
+        void triggerUserNotificationChannel(commentAuthorId);
+      }
     }
     await loadComments();
     await triggerPusherEvent({
@@ -278,11 +300,23 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
     };
   }, [pusher, videoId, loadComments]);
 
+  useEffect(() => {
+    const onRole = (e: Event) => {
+      const role = (e as CustomEvent<{ role?: string }>).detail?.role;
+      if (typeof role === "string") setViewerRole(role);
+    };
+    window.addEventListener(SESSION_ROLE_CHANGED_EVENT, onRole);
+    return () => window.removeEventListener(SESSION_ROLE_CHANGED_EVENT, onRole);
+  }, []);
+
   const renderComment = (item: CommentRow, depth: number) => {
     const author = Array.isArray(item.users) ? item.users[0] : item.users;
+    const authorRole = author && "role" in author ? author.role : null;
     const canDelete =
       Boolean(viewerId) &&
-      (viewerId === item.user_id || isOwner || isStaff);
+      (viewerId === item.user_id ||
+        isOwner ||
+        (isStaff && staffCanDeleteComment(viewerRole, authorRole)));
     const canEditOwn = Boolean(viewerId && viewerId === item.user_id);
     const showHeart = isOwner;
     const showReport = Boolean(viewerId && viewerId !== item.user_id);
@@ -329,7 +363,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
             {showHeart ? (
               <button
                 type="button"
-                onClick={() => void toggleHeart(item.id)}
+                onClick={() => void toggleHeart(item.id, item.user_id)}
                 className={clsx(
                   "rounded-md border px-1.5 py-1 text-xs transition",
                   hearts.has(item.id)

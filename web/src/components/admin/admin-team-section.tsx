@@ -366,7 +366,7 @@ export function AdminTeamSection() {
           {filteredRows.length === 0 ? (
             <li className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-slate-500">
               {rows.length === 0
-                ? "Нет записей с ролью персонала (модератор / админ / владелец)."
+                ? "Нет пользователей с ролями модератора, администратора или владельца."
                 : "Никто не подходит под фильтр."}
             </li>
           ) : (

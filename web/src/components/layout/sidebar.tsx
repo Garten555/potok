@@ -14,6 +14,7 @@ import {
   ThumbsUp,
   Video,
 } from "lucide-react";
+import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -64,7 +65,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
             className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10"
             aria-label={isOpen ? "Свернуть меню" : "Открыть меню"}
           >
-            <Menu className="h-4 w-4" />
+            <Menu className={SIDEBAR_ICON_CLASS} />
           </button>
 
           <div
@@ -91,14 +92,16 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
                   }
                 }}
                 className={clsx(
-                  "group flex min-w-0 items-center gap-3 rounded-xl py-2.5 text-left text-sm font-medium transition",
-                  showLabels ? "w-full px-3" : "w-full justify-center px-0 lg:justify-center",
+                  "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+                  showLabels
+                    ? "w-full gap-3 px-3 py-2.5"
+                    : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
                   isActive
                     ? "bg-[#2f74ff]/18 text-[#b7d9ff] shadow-[inset_0_0_0_1px_rgba(83,153,255,0.35)]"
                     : "text-slate-300 hover:bg-white/8 hover:text-white",
                 )}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
+                <Icon className={SIDEBAR_ICON_CLASS} />
                 <span
                   className={clsx(
                     "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -124,7 +127,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
                 href="/auth"
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-400/15 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-400/25"
               >
-                <LogIn className="h-3.5 w-3.5" />
+                <LogIn className={SIDEBAR_ICON_CLASS} />
                 Войти
               </Link>
             </div>
@@ -133,9 +136,13 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               href="/auth"
               title="Войдите, чтобы видеть подписки, историю и персональные рекомендации."
               aria-label="Войти для персональных рекомендаций"
-              className="mt-3 flex w-full items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 py-2.5 text-cyan-100 transition hover:bg-cyan-500/20"
+              className={clsx(
+                "mt-3 flex items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 text-cyan-100 transition hover:bg-cyan-500/20",
+                "w-full py-2.5",
+                SIDEBAR_NAV_COLLAPSED_SQ,
+              )}
             >
-              <LogIn className="h-4 w-4" />
+              <LogIn className={SIDEBAR_ICON_CLASS} />
             </Link>
           )
         ) : null}
@@ -149,11 +156,13 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               }
             }}
             className={clsx(
-              "flex min-w-0 w-full items-center gap-3 rounded-xl py-2.5 text-slate-300 transition hover:bg-white/8 hover:text-white",
-              showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
+              "flex min-w-0 items-center rounded-xl text-slate-300 transition hover:bg-white/8 hover:text-white",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Settings className="h-[18px] w-[18px] shrink-0" />
+            <Settings className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",

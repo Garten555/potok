@@ -121,6 +121,7 @@ export function SearchResults({ query }: SearchResultsProps) {
         const channelsQuery = supabase
           .from("users")
           .select("id,channel_name,channel_handle,avatar_url,subscribers_count,created_at")
+          .is("account_frozen_at", null)
           .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
           .limit(18);
 
@@ -150,7 +151,21 @@ export function SearchResults({ query }: SearchResultsProps) {
           watchedIds = new Set((watchedRes.data ?? []).map((r) => String((r as { video_id: string }).video_id)));
         }
 
-        const rawVideos = (videosRes.data ?? []) as unknown as VideoRow[];
+        let rawVideos = (videosRes.data ?? []) as unknown as VideoRow[];
+
+        const videoAuthorIds = Array.from(new Set(rawVideos.map((v) => String(v.user_id))));
+        if (videoAuthorIds.length > 0) {
+          const { data: authorRows } = await supabase
+            .from("users")
+            .select("id, account_frozen_at")
+            .in("id", videoAuthorIds);
+          const frozenAuthorIds = new Set(
+            (authorRows ?? [])
+              .filter((r) => Boolean((r as { account_frozen_at?: string | null }).account_frozen_at))
+              .map((r) => String((r as { id: string }).id)),
+          );
+          rawVideos = rawVideos.filter((v) => !frozenAuthorIds.has(String(v.user_id)));
+        }
 
         // Подтягиваем данные канала для отображения рядом с видео.
         const userIds = Array.from(new Set(rawVideos.map((v) => v.user_id)));

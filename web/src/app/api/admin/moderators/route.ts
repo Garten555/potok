@@ -11,7 +11,7 @@ export async function GET() {
   const { data, error } = await svc
     .from("users")
     .select("id, channel_name, channel_handle, role, created_at")
-    .in("role", ["moderator", "admin"])
+    .in("role", ["moderator", "admin", "owner"])
     .order("role", { ascending: true })
     .order("channel_name", { ascending: true });
 

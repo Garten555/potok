@@ -16,7 +16,7 @@ export type ChannelVerificationRequestRow = {
 const STATUS_FILTERS = ["pending", "rejected", "all"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-/** Список заявок на галочку (модератор/админ). Query: status=…, q — @handle / подстрока. */
+/** Список заявок на верификацию канала (модератор/админ). Query: status=…, q — @handle / подстрока. */
 export async function GET(req: Request) {
   const gate = await requireStaff();
   if (gate instanceof NextResponse) return gate;

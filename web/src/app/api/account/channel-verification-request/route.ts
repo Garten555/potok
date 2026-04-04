@@ -3,7 +3,7 @@ import { CHANNEL_VERIFICATION_MIN_SUBSCRIBERS } from "@/lib/channel-verification
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
-/** Заявка на верификацию канала (галочка) из студии. */
+/** Заявка на верификацию канала из студии. */
 export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const {
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const { data: row, error: fetchErr } = await svc
     .from("users")
     .select(
-      "subscribers_count, channel_verified, channel_verification_request_status",
+      "subscribers_count, channel_verified, channel_verification_request_status, account_frozen_at",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -45,7 +45,12 @@ export async function POST(req: Request) {
     subscribers_count: number | null;
     channel_verified: boolean | null;
     channel_verification_request_status: string | null;
+    account_frozen_at: string | null;
   };
+
+  if (u.account_frozen_at) {
+    return NextResponse.json({ error: "Аккаунт заморожен. Заявка недоступна до разморозки." }, { status: 403 });
+  }
 
   if (u.channel_verified) {
     return NextResponse.json({ error: "Канал уже верифицирован." }, { status: 400 });

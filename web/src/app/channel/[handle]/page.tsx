@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppHeader } from "@/components/layout/app-header";
+import { ContentUnavailableStub } from "@/components/public-content/content-unavailable-stub";
 import { ChannelBannerStrip, ChannelBrandingControls } from "@/components/channel/branding-editor";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { ChannelVerifiedBadge } from "@/components/channel/channel-verified-badge";
@@ -55,7 +56,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   const isOwner = viewer?.id === user.id;
   const channelFrozen = Boolean((user as { account_frozen_at?: string | null }).account_frozen_at);
   if (channelFrozen && !isOwner) {
-    notFound();
+    return <ContentUnavailableStub kind="channel" />;
   }
 
   const visibilityList = isOwner ? (["public", "unlisted", "private"] as const) : (["public"] as const);

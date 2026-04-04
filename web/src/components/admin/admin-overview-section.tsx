@@ -57,8 +57,9 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold text-slate-100">Обзор</h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-400">
-        Сводка по модерации и быстрые переходы. Модераторы видят очереди по жалобам и заявкам на галочку; разморозка,
-        команда и бан по жалобе — у администраторов и владельца платформы.
+        Сводка по ключевым метрикам и быстрые переходы в разделы. Набор доступных действий зависит от роли: модераторы
+        работают с жалобами и заявками, администраторы и владелец — дополнительно с разморозкой аккаунтов и составом
+        команды.
       </p>
 
       {err ? <p className="mt-6 text-sm text-rose-300/90">{err}</p> : null}
@@ -83,13 +84,13 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
           <StatCard
             label="Верифицировано"
             value={stats.verified_channels}
-            hint="Каналов с галочкой"
+            hint="Подтверждённые каналы"
             accent="emerald"
           />
           <StatCard
-            label="Заявок на галочку (ожидают)"
+            label="Заявок на верификацию (ожидают)"
             value={stats.pending_verification_requests}
-            hint="Раздел «Галочки» в боковом меню"
+            hint="Раздел «Верификация» в меню"
             accent="sky"
           />
           {admin && stats.pending_unfreeze !== null ? (
@@ -135,7 +136,7 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
             <li>
               →{" "}
               <Link href="/admin/verification-requests" className="text-cyan-300 hover:underline">
-                Заявки на галочку (верификация канала)
+                Заявки на верификацию канала
               </Link>
             </li>
           </ul>
@@ -154,12 +155,14 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
                 <li>
                   →{" "}
                   <Link href="/admin/team" className="text-amber-200/90 hover:underline">
-                    Назначить модераторов
+                    Команда и роли
                   </Link>
                 </li>
               </>
             ) : (
-              <li className="text-slate-500">Расширенные действия (разморозка, бан по жалобе) — у администратора.</li>
+              <li className="text-slate-500">
+                Расширенные действия (разморозка аккаунтов, блокировки по жалобам) доступны администраторам и владельцу.
+              </li>
             )}
           </ul>
         </div>

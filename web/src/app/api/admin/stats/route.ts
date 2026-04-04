@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAdminRole } from "@/lib/user-role";
 import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -33,7 +34,7 @@ export async function GET() {
   ]);
 
   let pendingUnfreeze: number | null = null;
-  if (gate.role === "admin") {
+  if (isAdminRole(gate.role)) {
     const u = await svc
       .from("users")
       .select("id", { count: "exact", head: true })
@@ -41,6 +42,11 @@ export async function GET() {
       .not("account_frozen_at", "is", null);
     pendingUnfreeze = u.count ?? 0;
   }
+
+  const pendingVerificationRes = await svc
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("channel_verification_request_status", "pending");
 
   return NextResponse.json({
     reports_open: openRes.count ?? 0,
@@ -56,6 +62,7 @@ export async function GET() {
     videos_total: videosTotalRes.count ?? 0,
     verified_channels: verifiedRes.count ?? 0,
     pending_unfreeze: pendingUnfreeze,
+    pending_verification_requests: pendingVerificationRes.count ?? 0,
     viewerRole: gate.role,
   });
 }

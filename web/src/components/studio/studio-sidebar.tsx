@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import clsx from "clsx";
-import { BarChart3, Clapperboard, Flag, Home, LayoutGrid, ListVideo, Menu, UploadCloud, Video, X } from "lucide-react";
+import { BarChart3, Flag, Home, LayoutGrid, ListVideo, Menu, UploadCloud, Video, X } from "lucide-react";
+import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 import {
   usePotokSidebarExpanded,
   useSidebarShowLabels,
@@ -18,8 +19,10 @@ type StudioSidebarProps = {
 
 const navBtnClass = (active: boolean, showLabels: boolean) =>
   clsx(
-    "flex w-full min-w-0 items-center gap-3 rounded-xl py-2.5 text-left text-sm font-medium transition",
-    showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
+    "flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+    showLabels
+      ? "w-full gap-3 px-3 py-2.5"
+      : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
     active
       ? "bg-[#2f74ff]/18 text-[#b7d9ff] shadow-[inset_0_0_0_1px_rgba(83,153,255,0.35)]"
       : "text-slate-300 hover:bg-white/8 hover:text-white",
@@ -61,12 +64,12 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 max-lg:hidden"
             aria-label={expanded ? "Свернуть меню студии" : "Развернуть меню студии"}
           >
-            <Menu className="h-4 w-4" />
+            <Menu className={SIDEBAR_ICON_CLASS} />
           </button>
           <div
             className={clsx(
               "h-10 shrink-0 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat transition-[width,opacity] duration-300",
-              showLabels ? "w-36 opacity-100" : "w-0 overflow-hidden opacity-0 lg:w-0",
+              showLabels ? "w-36 opacity-100" : "w-0 overflow-hidden opacity-0",
             )}
             aria-label="ПОТОК"
           />
@@ -76,30 +79,13 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             onClick={onMobileClose}
             className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 lg:hidden"
           >
-            <X className="h-4 w-4" />
+            <X className={SIDEBAR_ICON_CLASS} />
           </button>
-        </div>
-
-        <div
-          className={clsx(
-            "mb-2 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-2",
-            showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
-          )}
-        >
-          <Clapperboard className="h-[18px] w-[18px] shrink-0 text-cyan-200/90" aria-hidden />
-          <span
-            className={clsx(
-              "truncate text-sm font-medium text-slate-200 transition-[opacity,width] duration-300",
-              showLabels ? "max-w-[10rem] opacity-100" : "w-0 opacity-0",
-            )}
-          >
-            Potok Studio
-          </span>
         </div>
 
         <nav className="flex flex-col gap-1.5 pt-1 sm:gap-2">
           <button type="button" onClick={() => handleSelect("upload")} className={navBtnClass(activeNav === "upload", showLabels)}>
-            <UploadCloud className="h-[18px] w-[18px] shrink-0" />
+            <UploadCloud className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -110,7 +96,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             </span>
           </button>
           <button type="button" onClick={() => handleSelect("content")} className={navBtnClass(activeNav === "content", showLabels)}>
-            <Video className="h-[18px] w-[18px] shrink-0" />
+            <Video className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -121,7 +107,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             </span>
           </button>
           <button type="button" onClick={() => handleSelect("stats")} className={navBtnClass(activeNav === "stats", showLabels)}>
-            <BarChart3 className="h-[18px] w-[18px] shrink-0" />
+            <BarChart3 className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -132,7 +118,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             </span>
           </button>
           <button type="button" onClick={() => handleSelect("playlists")} className={navBtnClass(activeNav === "playlists", showLabels)}>
-            <ListVideo className="h-[18px] w-[18px] shrink-0" />
+            <ListVideo className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -143,7 +129,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             </span>
           </button>
           <button type="button" onClick={() => handleSelect("channel_home")} className={navBtnClass(activeNav === "channel_home", showLabels)}>
-            <LayoutGrid className="h-[18px] w-[18px] shrink-0" />
+            <LayoutGrid className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -154,7 +140,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             </span>
           </button>
           <button type="button" onClick={() => handleSelect("incoming_reports")} className={navBtnClass(activeNav === "incoming_reports", showLabels)}>
-            <Flag className="h-[18px] w-[18px] shrink-0" />
+            <Flag className={SIDEBAR_ICON_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -171,18 +157,20 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             href="/"
             onClick={onMobileClose}
             className={clsx(
-              "flex min-w-0 items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
-              showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
+              "flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Home className="h-[18px] w-[18px] shrink-0 text-slate-300" />
+            <Home className={clsx(SIDEBAR_ICON_CLASS, "text-slate-300")} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
                 showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
               )}
             >
-              На сайт
+              На главную
             </span>
           </Link>
         </div>

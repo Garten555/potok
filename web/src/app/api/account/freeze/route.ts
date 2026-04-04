@@ -78,5 +78,10 @@ export async function POST() {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  const { error: subErr } = await svc.from("subscriptions").delete().eq("channel_id", user.id);
+  if (subErr) {
+    return NextResponse.json({ error: subErr.message }, { status: 400 });
+  }
+
   return NextResponse.json({ ok: true, account_data_retention_until: retentionUntil });
 }

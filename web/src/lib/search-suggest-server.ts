@@ -63,6 +63,7 @@ export async function loadSearchSuggest(qRaw: string, history: string[]): Promis
     supabase
       .from("users")
       .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
+      .is("account_frozen_at", null)
       .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
       .order("subscribers_count", { ascending: false })
       .limit(10),

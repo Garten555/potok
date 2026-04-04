@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { useAccountFrozen } from "@/components/layout/account-frozen-context";
 
 type FreezeEligibility =
   | { status: "loading" }
@@ -12,6 +13,7 @@ type FreezeEligibility =
   | { status: "ready"; canFreeze: false; reason: "sole_admin" };
 
 export function AccountFreezeSection() {
+  const { refresh: refreshFrozen } = useAccountFrozen();
   const router = useRouter();
   const [eligibility, setEligibility] = useState<FreezeEligibility>({ status: "loading" });
   const [confirmText, setConfirmText] = useState("");
@@ -57,6 +59,7 @@ export function AccountFreezeSection() {
         kind: "ok",
         text: "Аккаунт заморожен. Сейчас вы будете перенаправлены на страницу восстановления доступа.",
       });
+      refreshFrozen();
       router.replace("/account/frozen");
       router.refresh();
     } finally {

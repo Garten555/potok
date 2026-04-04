@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateChannelHandleFromName } from "@/lib/channel-handle";
+import { frozenAccountJsonResponse } from "@/lib/assert-account-not-frozen";
 
 const HANDLE_RE = /^[a-z0-9][a-z0-9._-]{2,29}$/;
 const MAX_HANDLE_CHANGES_PER_30_DAYS = 3;
@@ -67,6 +68,9 @@ export async function PATCH(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+
+  const frozenRes = await frozenAccountJsonResponse(supabase, user.id);
+  if (frozenRes) return frozenRes;
 
   let body: { channel_name?: string };
   try {

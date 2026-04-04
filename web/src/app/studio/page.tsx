@@ -16,6 +16,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
+import { SIDEBAR_ICON_CLASS } from "@/components/layout/sidebar-icons";
+import { StudioBrandHero } from "@/components/studio/studio-brand-hero";
 import { StudioSidebar } from "@/components/studio/studio-sidebar";
 import type { ThumbCandidate } from "@/components/studio/studio-upload-panel";
 import type { EditVideoFieldErrors, StudioContentItem } from "@/components/studio/studio-content-view";
@@ -1362,10 +1364,10 @@ function StudioInner() {
           onClick={() => setMobileNavOpen(true)}
           className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-cyan-400/25 bg-slate-950/60 text-cyan-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.12)] transition hover:bg-cyan-950/40"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className={SIDEBAR_ICON_CLASS} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-slate-100">Студия</p>
+          <p className="truncate text-sm font-semibold tracking-tight text-slate-100">Potok Studio</p>
           <p className="truncate text-[11px] text-slate-500">
             {activeNav === "upload"
               ? "Загрузка видео"
@@ -1384,7 +1386,7 @@ function StudioInner() {
           href="/"
           className="shrink-0 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
         >
-          На сайт
+          На главную
         </Link>
       </header>
 
@@ -1407,6 +1409,7 @@ function StudioInner() {
         />
 
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5 lg:px-6 lg:py-5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <StudioBrandHero />
           {activeNav === "stats" ? <StudioStatsView channelStats={channelStats} /> : null}
 
           {activeNav === "upload" ? (

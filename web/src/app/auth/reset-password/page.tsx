@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { z } from "zod";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { PasswordRequirementsPanel } from "@/components/password-requirements-panel";
+import {
+  PasswordRepeatHint,
+  passwordRepeatBorderClass,
+  weakNewPasswordBorderClass,
+} from "@/components/password-repeat-hint";
 import { getPasswordValidationState, strongPasswordPairSchema } from "@/lib/password-validation";
 
 const emailCodeSchema = z.object({
@@ -28,8 +34,6 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
-  const [isPasswordHovered, setIsPasswordHovered] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ password?: string; confirmPassword?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -45,6 +49,8 @@ export default function ResetPasswordPage() {
   const passwordValidation = useMemo(() => getPasswordValidationState(password), [password]);
   const isConfirmPasswordMismatch =
     confirmPassword.length > 0 && password !== confirmPassword;
+  const confirmMatch = confirmPassword.length > 0 && password === confirmPassword;
+  const confirmValidForSave = confirmMatch && passwordValidation.isStrong;
   const saveBlockReason = useMemo(() => {
     if (!passwordValidation.isStrong) {
       return "Пароль слишком слабый. Выполните все требования к паролю.";
@@ -235,11 +241,7 @@ export default function ResetPasswordPage() {
             </p>
           ) : null}
 
-          <label
-            className="relative block space-y-1"
-            onMouseEnter={() => setIsPasswordHovered(true)}
-            onMouseLeave={() => setIsPasswordHovered(false)}
-          >
+          <label className="relative block space-y-1">
             <span className="text-xs text-slate-400">Новый пароль</span>
             <input
               type={showPassword ? "text" : "password"}
@@ -248,12 +250,14 @@ export default function ResetPasswordPage() {
                 setPassword(e.target.value);
                 setFieldErrors((prev) => ({ ...prev, password: undefined }));
               }}
-              onFocus={() => setIsPasswordFocused(true)}
-              onBlur={() => setIsPasswordFocused(false)}
               required
               className={clsx(
                 "w-full rounded-xl border bg-[#0c1323] px-3 py-2.5 pr-24 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55",
-                fieldErrors.password ? "border-rose-400/50" : "border-white/10",
+                weakNewPasswordBorderClass({
+                  fieldError: !!fieldErrors.password,
+                  hasContent: password.length > 0,
+                  isStrong: passwordValidation.isStrong,
+                }),
               )}
               placeholder="******"
             />
@@ -267,65 +271,9 @@ export default function ResetPasswordPage() {
             {fieldErrors.password ? (
               <span className="text-xs text-rose-300">{fieldErrors.password}</span>
             ) : null}
-            {isPasswordFocused || isPasswordHovered ? (
-              <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%+8px)] z-30 rounded-xl border border-white/10 bg-[#131a2c]/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-sm">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-300">Надежность пароля</span>
-                  <span
-                    className={clsx(
-                      "text-xs font-medium",
-                      passwordValidation.isStrong
-                        ? "text-emerald-300"
-                        : passwordValidation.score >= 4
-                          ? "text-amber-300"
-                          : "text-rose-300",
-                    )}
-                  >
-                    {passwordValidation.isStrong
-                      ? "Сильный"
-                      : passwordValidation.score >= 4
-                        ? "Средний"
-                        : "Слабый"}
-                  </span>
-                </div>
-                <div className="mb-3 h-1.5 w-full rounded-full bg-[#0c1323]">
-                  <div
-                    className={clsx(
-                      "h-full rounded-full transition-all",
-                      passwordValidation.isStrong
-                        ? "bg-emerald-400"
-                        : passwordValidation.score >= 4
-                          ? "bg-amber-400"
-                          : "bg-rose-400",
-                    )}
-                    style={{ width: `${(passwordValidation.score / 6) * 100}%` }}
-                  />
-                </div>
-                {!passwordValidation.noCyrillic && password.length > 0 ? (
-                  <p className="mb-2 text-xs text-rose-300">
-                    Внимание: пароль не должен содержать русские символы.
-                  </p>
-                ) : null}
-                <div className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
-                  <span className={clsx(passwordValidation.minLength ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.minLength ? "✓" : "•"} Минимум 8 символов
-                  </span>
-                  <span className={clsx(passwordValidation.hasLowercase ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.hasLowercase ? "✓" : "•"} Строчная латинская буква
-                  </span>
-                  <span className={clsx(passwordValidation.hasUppercase ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.hasUppercase ? "✓" : "•"} Заглавная латинская буква
-                  </span>
-                  <span className={clsx(passwordValidation.hasDigit ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.hasDigit ? "✓" : "•"} Минимум одна цифра
-                  </span>
-                  <span className={clsx(passwordValidation.hasSpecial ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.hasSpecial ? "✓" : "•"} Минимум один спецсимвол
-                  </span>
-                  <span className={clsx(passwordValidation.noCyrillic ? "text-emerald-300" : "text-slate-400")}>
-                    {passwordValidation.noCyrillic ? "✓" : "•"} Без русских символов
-                  </span>
-                </div>
+            {password.length > 0 ? (
+              <div className="mt-3">
+                <PasswordRequirementsPanel state={passwordValidation} />
               </div>
             ) : null}
           </label>
@@ -342,11 +290,15 @@ export default function ResetPasswordPage() {
               required
               className={clsx(
                 "w-full rounded-xl border bg-[#0c1323] px-3 py-2.5 pr-24 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55",
-                fieldErrors.confirmPassword || isConfirmPasswordMismatch
-                  ? "border-rose-400/50"
-                  : "border-white/10",
+                passwordRepeatBorderClass({
+                  fieldError: !!fieldErrors.confirmPassword,
+                  mismatch: isConfirmPasswordMismatch,
+                  validForSave: confirmValidForSave,
+                  match: confirmMatch,
+                }),
               )}
               placeholder="******"
+              aria-describedby="reset-password-confirm-hint"
             />
             <button
               type="button"
@@ -355,11 +307,15 @@ export default function ResetPasswordPage() {
             >
               {showConfirmPassword ? "Скрыть" : "Показать"}
             </button>
-            {fieldErrors.confirmPassword || isConfirmPasswordMismatch ? (
-              <span className="text-xs text-rose-300">
-                {fieldErrors.confirmPassword ?? "Пароли не совпадают."}
-              </span>
+            {fieldErrors.confirmPassword ? (
+              <span className="text-xs text-rose-300">{fieldErrors.confirmPassword}</span>
             ) : null}
+            <PasswordRepeatHint
+              confirm={confirmPassword}
+              password={password}
+              passwordStrong={passwordValidation.isStrong}
+              hintId="reset-password-confirm-hint"
+            />
           </label>
 
           {error ? (
