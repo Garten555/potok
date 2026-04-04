@@ -11,6 +11,7 @@ import type { SpotlightChannel } from "@/components/channel/channel-spotlight-st
 import { SubscribeButton } from "@/components/channel/subscribe-button";
 import { ChannelReportButton } from "@/components/channel/channel-report-button";
 import type { ChannelHomeSectionResolved, ChannelVideoItem } from "@/lib/channel-home-types";
+import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
 
 function playAllHrefUploads(videos: ChannelVideoItem[]): string | null {
   const first = videos[0];
@@ -44,7 +45,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   const { data: user, error } = await supabase
     .from("users")
     .select(
-      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all, account_frozen_at, channel_verified",
+      "id, channel_name, channel_handle, avatar_url, banner_url, subscribers_count, created_at, channel_show_play_all, account_frozen_at, channel_verified, moderation_soft_freeze_at, moderation_hard_freeze_until",
     )
     .ilike("channel_handle", handle)
     .maybeSingle();
@@ -54,8 +55,12 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
   }
 
   const isOwner = viewer?.id === user.id;
-  const channelFrozen = Boolean((user as { account_frozen_at?: string | null }).account_frozen_at);
-  if (channelFrozen && !isOwner) {
+  const urow = user as {
+    account_frozen_at?: string | null;
+    moderation_soft_freeze_at?: string | null;
+    moderation_hard_freeze_until?: string | null;
+  };
+  if (!isOwner && isChannelHiddenFromPublic(urow)) {
     return <ContentUnavailableStub kind="channel" />;
   }
 
@@ -365,7 +370,13 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
                     <ChannelVerifiedBadge className="shrink-0 text-cyan-400" />
                   ) : null}
                 </h1>
-                <p className="mt-1 text-sm text-cyan-200/90">@{user.channel_handle}</p>
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                  <span className="font-mono text-cyan-200/90">@{user.channel_handle}</span>
+                  <span className="text-slate-500">
+                    {(subscribersCount ?? user.subscribers_count ?? 0).toLocaleString("ru-RU")} подписчиков ·{" "}
+                    {(videosCount ?? 0).toLocaleString("ru-RU")} видео
+                  </span>
+                </p>
                 <p className="mt-2 text-xs text-slate-500 sm:text-sm">
                   На POTOK с {joinedDate}
                 </p>

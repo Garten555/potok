@@ -18,6 +18,7 @@ import {
   tokenHitsInText,
   viewsSoftBoost,
 } from "@/lib/search-relevance";
+import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
 
 type SearchResultsProps = {
   query: string;
@@ -122,6 +123,10 @@ export function SearchResults({ query }: SearchResultsProps) {
           .from("users")
           .select("id,channel_name,channel_handle,avatar_url,subscribers_count,created_at")
           .is("account_frozen_at", null)
+          .is("moderation_soft_freeze_at", null)
+          .or(
+            `moderation_hard_freeze_until.is.null,moderation_hard_freeze_until.lt.${new Date().toISOString()}`,
+          )
           .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
           .limit(18);
 
@@ -157,14 +162,19 @@ export function SearchResults({ query }: SearchResultsProps) {
         if (videoAuthorIds.length > 0) {
           const { data: authorRows } = await supabase
             .from("users")
-            .select("id, account_frozen_at")
+            .select("id, account_frozen_at, moderation_soft_freeze_at, moderation_hard_freeze_until")
             .in("id", videoAuthorIds);
-          const frozenAuthorIds = new Set(
-            (authorRows ?? [])
-              .filter((r) => Boolean((r as { account_frozen_at?: string | null }).account_frozen_at))
-              .map((r) => String((r as { id: string }).id)),
-          );
-          rawVideos = rawVideos.filter((v) => !frozenAuthorIds.has(String(v.user_id)));
+          const hiddenAuthorIds = new Set<string>();
+          for (const r of authorRows ?? []) {
+            const row = r as {
+              id: string;
+              account_frozen_at?: string | null;
+              moderation_soft_freeze_at?: string | null;
+              moderation_hard_freeze_until?: string | null;
+            };
+            if (isChannelHiddenFromPublic(row)) hiddenAuthorIds.add(String(row.id));
+          }
+          rawVideos = rawVideos.filter((v) => !hiddenAuthorIds.has(String(v.user_id)));
         }
 
         // Подтягиваем данные канала для отображения рядом с видео.

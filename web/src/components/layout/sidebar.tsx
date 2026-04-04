@@ -13,6 +13,7 @@ import {
   Settings,
   ThumbsUp,
   Video,
+  Scale,
 } from "lucide-react";
 import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 
@@ -147,6 +148,23 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
           )
         ) : null}
 
+        {showLabels ? (
+          <div className="mt-3 space-y-1 border-t border-white/8 pt-3">
+            <Link
+              href="/rules"
+              onClick={() => {
+                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                  onToggle();
+                }
+              }}
+              className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-400 transition hover:bg-white/8 hover:text-slate-200"
+            >
+              <Scale className={SIDEBAR_ICON_CLASS} />
+              <span className="min-w-0 leading-snug">О сервисе и правилах</span>
+            </Link>
+          </div>
+        ) : null}
+
         <div className="mt-auto border-t border-white/8 pt-3">
           <Link
             href="/settings"
@@ -174,6 +192,11 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               Настройки
             </span>
           </Link>
+          {showLabels ? (
+            <p className="mt-3 px-1 text-center text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500/90">
+              © ПОТОК · 2026
+            </p>
+          ) : null}
         </div>
       </div>
     </aside>

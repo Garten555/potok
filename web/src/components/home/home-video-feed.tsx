@@ -6,6 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PlayCircle } from "lucide-react";
 import { VideoGridCard } from "@/components/video/video-grid-card";
 import { scoreVideoForHome, type RecContext } from "@/lib/recommendations";
+import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
 
 /**
  * Главная: как на YouTube — полоса категорий (слайдер чипов) + один большой блок рекомендаций.
@@ -94,19 +95,26 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
       const authorIds = Array.from(new Set(loadedVideos.map((v) => v.user_id).filter(Boolean)));
       if (authorIds.length > 0) {
         try {
-          const { data: frozenAuthors, error: frozenErr } = await supabase
+          const { data: authorPenaltyRows, error: penErr } = await supabase
             .from("users")
-            .select("id")
-            .in("id", authorIds)
-            .not("account_frozen_at", "is", null);
-          if (!frozenErr && frozenAuthors) {
-            const frozenSet = new Set((frozenAuthors as { id: string }[]).map((r) => String(r.id)));
-            if (frozenSet.size > 0) {
-              loadedVideos = loadedVideos.filter((v) => !frozenSet.has(v.user_id));
+            .select("id, account_frozen_at, moderation_soft_freeze_at, moderation_hard_freeze_until")
+            .in("id", authorIds);
+          if (!penErr && authorPenaltyRows) {
+            const hidden = new Set<string>();
+            for (const row of authorPenaltyRows as Array<{
+              id: string;
+              account_frozen_at?: string | null;
+              moderation_soft_freeze_at?: string | null;
+              moderation_hard_freeze_until?: string | null;
+            }>) {
+              if (isChannelHiddenFromPublic(row)) hidden.add(String(row.id));
+            }
+            if (hidden.size > 0) {
+              loadedVideos = loadedVideos.filter((v) => !hidden.has(v.user_id));
             }
           }
         } catch {
-          /* миграция без колонки — пропускаем фильтр */
+          /* миграция без колонок — пропускаем фильтр */
         }
       }
 

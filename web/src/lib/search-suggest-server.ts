@@ -64,6 +64,10 @@ export async function loadSearchSuggest(qRaw: string, history: string[]): Promis
       .from("users")
       .select("id,channel_name,channel_handle,avatar_url,subscribers_count")
       .is("account_frozen_at", null)
+      .is("moderation_soft_freeze_at", null)
+      .or(
+        `moderation_hard_freeze_until.is.null,moderation_hard_freeze_until.lt.${new Date().toISOString()}`,
+      )
       .or(`channel_name.ilike.%${q}%,channel_handle.ilike.%${q}%`)
       .order("subscribers_count", { ascending: false })
       .limit(10),

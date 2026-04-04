@@ -16,6 +16,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
+import { moderationStudioBannerText } from "@/lib/moderation-banner";
 import { SIDEBAR_ICON_CLASS } from "@/components/layout/sidebar-icons";
 import { StudioBrandHero } from "@/components/studio/studio-brand-hero";
 import { StudioSidebar } from "@/components/studio/studio-sidebar";
@@ -326,6 +327,7 @@ function StudioInner() {
   const [studioContentQuery, setStudioContentQuery] = useState("");
   const [studioContentVisibility, setStudioContentVisibility] = useState<"all" | Visibility>("all");
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+  const [moderationNotice, setModerationNotice] = useState<string | null>(null);
 
   const sp = useSearchParams();
   const router = useRouter();
@@ -689,9 +691,23 @@ function StudioInner() {
 
         const { data: profileStats } = await supabase
           .from("users")
-          .select("subscribers_count")
+          .select(
+            "subscribers_count, upload_banned_until, moderation_soft_freeze_at, moderation_hard_freeze_until, moderation_no_appeal",
+          )
           .eq("id", userData.user.id)
           .maybeSingle();
+
+        try {
+          setModerationNotice(
+            profileStats
+              ? moderationStudioBannerText(
+                  profileStats as Parameters<typeof moderationStudioBannerText>[0],
+                )
+              : null,
+          );
+        } catch {
+          setModerationNotice(null);
+        }
 
         const { count: videosCount } = await supabase
           .from("videos")
@@ -815,6 +831,49 @@ function StudioInner() {
     };
     void init();
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = createSupabaseBrowserClient();
+    let cancelled = false;
+    const channelRef: { current: ReturnType<typeof supabase.channel> | null } = { current: null };
+
+    void (async () => {
+      const ch = supabase
+        .channel(`studio-users-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "users", filter: `id=eq.${userId}` },
+          async () => {
+            const { data } = await supabase
+              .from("users")
+              .select(
+                "upload_banned_until, moderation_soft_freeze_at, moderation_hard_freeze_until, moderation_no_appeal",
+              )
+              .eq("id", userId)
+              .maybeSingle();
+            if (!cancelled && data) {
+              setModerationNotice(
+                moderationStudioBannerText(
+                  data as Parameters<typeof moderationStudioBannerText>[0],
+                ),
+              );
+            }
+          },
+        )
+        .subscribe();
+      if (cancelled) {
+        void supabase.removeChannel(ch);
+        return;
+      }
+      channelRef.current = ch;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channelRef.current) void supabase.removeChannel(channelRef.current);
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (isCategoryManuallySelected || categories.length === 0) return;
@@ -1350,6 +1409,17 @@ function StudioInner() {
 
   return (
     <div className="flex min-h-screen min-h-[100dvh] flex-col bg-[#0c1120]">
+      {moderationNotice ? (
+        <div className="border-b border-amber-400/25 bg-amber-500/10 px-4 py-2.5 text-center text-xs text-amber-100/95 sm:text-sm">
+          {moderationNotice}{" "}
+          <Link
+            href="/rules"
+            className="font-medium text-amber-50 underline decoration-amber-400/60 underline-offset-2"
+          >
+            Правила сервиса
+          </Link>
+        </div>
+      ) : null}
       <header
         className={clsx(
           "sticky top-0 z-[60] flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0c1120]/95 px-3 backdrop-blur-md",

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { frozenAccountJsonResponse } from "@/lib/assert-account-not-frozen";
 import { REPORT_REASON_CODES, type ReportReasonCode } from "@/lib/report-reasons";
+import {
+  applyModerationPenaltiesAfterReport,
+  resolveReportTargetOwnerId,
+} from "@/lib/moderation-penalties";
 
 const ALLOWED = new Set<string>(REPORT_REASON_CODES.map((r) => r.code));
 
@@ -59,6 +64,21 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const svc = createSupabaseServiceClient();
+      const ownerId = await resolveReportTargetOwnerId(svc, targetType, targetId);
+      if (ownerId && ownerId !== user.id) {
+        await applyModerationPenaltiesAfterReport(svc, ownerId, {
+          targetType,
+          reasonCode,
+        });
+      }
+    } catch (e) {
+      console.error("[reports] moderation penalties", e);
+    }
   }
 
   return NextResponse.json({ ok: true });

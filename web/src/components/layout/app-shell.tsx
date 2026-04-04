@@ -12,7 +12,8 @@ import {
   useAccountFrozen,
 } from "@/components/layout/account-frozen-context";
 import { FrozenAccountGate } from "@/components/layout/frozen-account-gate";
-import { isAllowedPathWhenFrozen } from "@/lib/account-frozen-paths";
+import { ModerationSuspendedGate } from "@/components/layout/moderation-suspended-gate";
+import { isAllowedPathWhenFrozen, isAllowedPathWhenModerationSuspended } from "@/lib/account-frozen-paths";
 import { DESKTOP_LG, usePotokSidebarExpanded } from "@/components/layout/use-potok-sidebar-expanded";
 
 type AppShellProps = {
@@ -38,7 +39,7 @@ function AppShellRoutes({
   isAuthenticated,
 }: AppShellRoutesProps) {
   const pathname = usePathname();
-  const { isFrozen } = useAccountFrozen();
+  const { isFrozen, isModerationHardSuspended } = useAccountFrozen();
   const isStudioRoute = pathname.startsWith("/studio");
   const isAdminRoute = pathname.startsWith("/admin");
   const isFullBleedChrome = isStudioRoute || isAdminRoute;
@@ -48,11 +49,20 @@ function AppShellRoutes({
     (isFrozen === true ||
       (isFrozen === null && isAuthenticated && pathname.startsWith("/account/frozen")));
 
+  const moderationMinimalChrome =
+    isAllowedPathWhenModerationSuspended(pathname) &&
+    (isModerationHardSuspended === true ||
+      (isModerationHardSuspended === null &&
+        isAuthenticated &&
+        pathname.startsWith("/account/moderation-suspended")));
+
+  const minimalChrome = frozenMinimalChrome || moderationMinimalChrome;
+
   if (isFullBleedChrome) {
     return <main className={mainSurfaceClass}>{children}</main>;
   }
 
-  if (frozenMinimalChrome) {
+  if (minimalChrome) {
     return <main className={mainSurfaceClass}>{children}</main>;
   }
 
@@ -139,6 +149,7 @@ export function AppShell({ children }: AppShellProps) {
         <AccountFrozenProvider>
           <SidebarStateProvider value={{ isOpen, toggleSidebar }}>
             <FrozenAccountGate>
+              <ModerationSuspendedGate>
               <AppShellRoutes
                 isOpen={isOpen}
                 toggleSidebar={toggleSidebar}
@@ -147,6 +158,7 @@ export function AppShell({ children }: AppShellProps) {
               >
                 {children}
               </AppShellRoutes>
+              </ModerationSuspendedGate>
             </FrozenAccountGate>
           </SidebarStateProvider>
         </AccountFrozenProvider>

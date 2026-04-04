@@ -11,6 +11,7 @@ import { pusherServer } from "@/lib/pusher/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { loadPlaylistForWatch } from "@/lib/watch-playlist";
+import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
 import { scoreVideoForWatchSidebar, type VideoRecInput } from "@/lib/recommendations";
 import type { RecommendationItem } from "@/components/watch/recommendations-panel";
 
@@ -63,11 +64,19 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
 
   const { data: ownerRow } = await supabase
     .from("users")
-    .select("account_frozen_at")
+    .select("account_frozen_at, moderation_soft_freeze_at, moderation_hard_freeze_until")
     .eq("id", video.user_id)
     .maybeSingle();
-  const ownerFrozen = Boolean((ownerRow as { account_frozen_at?: string | null } | null)?.account_frozen_at);
-  if (ownerFrozen && !isOwner) {
+  const ownerHidden =
+    ownerRow &&
+    isChannelHiddenFromPublic(
+      ownerRow as {
+        account_frozen_at?: string | null;
+        moderation_soft_freeze_at?: string | null;
+        moderation_hard_freeze_until?: string | null;
+      },
+    );
+  if (ownerHidden && !isOwner) {
     return <ContentUnavailableStub kind="video" />;
   }
 
