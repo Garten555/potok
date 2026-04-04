@@ -78,8 +78,9 @@ export function AdminVerificationRequestsSection() {
       <h1 className="text-xl font-semibold text-slate-100">Заявки на галочку</h1>
       <p className="mt-1 text-sm text-slate-400">
         Авторы с достаточным числом подписчиков отправляют заявку из студии. Одобрение включает верификацию канала;
-        отклонение — автор может подать заявку снова. Ниже — вкладки по статусу и поиск по названию или @нику (от 2
-        символов).
+        отклонение — автор может подать заявку снова. Поиск заявок — как везде в админке:{" "}
+        <strong className="text-slate-300">@handle</strong> или <strong className="text-slate-300">подстрока</strong> ника
+        (от 2 символов).
       </p>
 
       <div className="mt-5 flex flex-wrap gap-2">
@@ -102,13 +103,13 @@ export function AdminVerificationRequestsSection() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
-          <label className="text-xs text-slate-500">Поиск по названию / @нику</label>
+          <label className="text-xs text-slate-500">Поиск: @handle или подстрока</label>
           <input
             className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && setQApplied(q.trim())}
-            placeholder="от 2 символов"
+            placeholder="@handle или подстрока"
           />
         </div>
         <button

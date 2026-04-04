@@ -20,6 +20,7 @@ type Stats = {
   videos_total: number;
   verified_channels: number;
   pending_unfreeze: number | null;
+  pending_verification_requests: number;
   viewerRole: string | null;
 };
 
@@ -56,8 +57,8 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold text-slate-100">Обзор</h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-400">
-        Сводка по модерации и быстрые переходы. Раздел «Разморозка» и расширенные действия по пользователям — у
-        администраторов.
+        Сводка по модерации и быстрые переходы. Модераторы видят очереди по жалобам и заявкам на галочку; разморозка,
+        команда и бан по жалобе — у администраторов и владельца платформы.
       </p>
 
       {err ? <p className="mt-6 text-sm text-rose-300/90">{err}</p> : null}
@@ -84,6 +85,12 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
             value={stats.verified_channels}
             hint="Каналов с галочкой"
             accent="emerald"
+          />
+          <StatCard
+            label="Заявок на галочку (ожидают)"
+            value={stats.pending_verification_requests}
+            hint="Раздел «Галочки» в боковом меню"
+            accent="sky"
           />
           {admin && stats.pending_unfreeze !== null ? (
             <StatCard
@@ -122,7 +129,13 @@ export function AdminOverviewSection({ viewerRole }: { viewerRole: string | null
             <li>
               →{" "}
               <Link href="/admin/users" className="text-cyan-300 hover:underline">
-                Пользователи: поиск и верификация канала (галочка)
+                Пользователи: поиск по @handle / нику и верификация
+              </Link>
+            </li>
+            <li>
+              →{" "}
+              <Link href="/admin/verification-requests" className="text-cyan-300 hover:underline">
+                Заявки на галочку (верификация канала)
               </Link>
             </li>
           </ul>

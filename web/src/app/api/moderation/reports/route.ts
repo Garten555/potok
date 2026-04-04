@@ -5,10 +5,8 @@ import type {
   ModerationReportsListErrorBody,
   ModerationReportsListResponse,
 } from "@/lib/moderation-reports-types";
+import { parseAdminUserSearchQuery } from "@/lib/admin-user-search";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type ReportRecord = Record<string, unknown>;
 
@@ -35,45 +33,34 @@ export async function GET(req: Request) {
 
   let channelUserId: string | null = null;
   if (channelRaw) {
-    if (channelRaw.startsWith("@")) {
-      const handle = channelRaw.slice(1).replace(/[%_]/g, "").slice(0, 80);
-      if (handle.length < 1) {
-        return jsonError("Укажите ник после @", 400);
-      }
-      const { data: u } = await svc.from("users").select("id").ilike("channel_handle", handle).maybeSingle();
-      channelUserId = (u as { id?: string } | null)?.id ?? null;
-    } else if (UUID_RE.test(channelRaw)) {
-      channelUserId = channelRaw;
-    } else {
-      const term = channelRaw.replace(/[%_]/g, "").trim().slice(0, 120);
-      if (term.length < 2) {
-        return jsonError("Для поиска по названию канала нужно минимум 2 символа (или UUID / @handle)", 400);
-      }
-      const like = `%${term}%`;
-      const [byName, byHandle] = await Promise.all([
-        svc.from("users").select("id").ilike("channel_name", like),
-        svc.from("users").select("id").ilike("channel_handle", like),
-      ]);
-      const nameErr = byName.error;
-      const handleErr = byHandle.error;
-      if (nameErr || handleErr) {
-        return jsonError(nameErr?.message ?? handleErr?.message ?? "Ошибка запроса", 400);
-      }
-      const rows = [...(byName.data ?? []), ...(byHandle.data ?? [])];
-      const uniqIds = [...new Set(rows.map((r) => (r as { id: string }).id))];
-      if (uniqIds.length === 0) {
-        return jsonError("Канал не найден по названию или нику (проверьте написание)", 404);
-      }
-      if (uniqIds.length > 1) {
-        return jsonError(
-          `Найдено несколько каналов (${uniqIds.length}) по этой подстроке. Уточните @handle или UUID владельца.`,
-          400,
-        );
-      }
-      channelUserId = uniqIds[0];
+    const parsed = parseAdminUserSearchQuery(channelRaw);
+    if (!parsed) {
+      return jsonError("Для фильтра по каналу укажите @handle или минимум 2 символа названия / ника канала.", 400);
     }
+    const like = `%${parsed.term}%`;
+    const [byName, byHandle] = await Promise.all([
+      svc.from("users").select("id").ilike("channel_name", like),
+      svc.from("users").select("id").ilike("channel_handle", like),
+    ]);
+    const nameErr = byName.error;
+    const handleErr = byHandle.error;
+    if (nameErr || handleErr) {
+      return jsonError(nameErr?.message ?? handleErr?.message ?? "Ошибка запроса", 400);
+    }
+    const rows = [...(byName.data ?? []), ...(byHandle.data ?? [])];
+    const uniqIds = [...new Set(rows.map((r) => (r as { id: string }).id))];
+    if (uniqIds.length === 0) {
+      return jsonError("Канал не найден по названию или нику (проверьте написание)", 404);
+    }
+    if (uniqIds.length > 1) {
+      return jsonError(
+        `Найдено несколько каналов (${uniqIds.length}) по этой подстроке. Уточните полный @handle (как в URL канала).`,
+        400,
+      );
+    }
+    channelUserId = uniqIds[0];
     if (!channelUserId) {
-      return jsonError("Канал с таким @handle не найден", 404);
+      return jsonError("Канал не найден по этому запросу.", 404);
     }
   }
 

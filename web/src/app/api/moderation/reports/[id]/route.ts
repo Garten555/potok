@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { resolveUserIdFromAdminInput } from "@/lib/admin-user-search";
+import { isAdminRole } from "@/lib/user-role";
 import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -40,8 +42,8 @@ export async function PATCH(req: Request, ctx: Params) {
     resolved_at: status === "resolved" || status === "dismissed" ? new Date().toISOString() : null,
   };
 
-  if (body.ban_user_id && body.banned_until && staffRole !== "admin") {
-    return NextResponse.json({ error: "Бан пользователей доступен только администраторам." }, { status: 403 });
+  if (body.ban_user_id && body.banned_until && !isAdminRole(staffRole)) {
+    return NextResponse.json({ error: "Бан пользователей доступен только администраторам и владельцу." }, { status: 403 });
   }
 
   const { error: upErr } = await svc.from("reports").update(updates).eq("id", id);
@@ -50,11 +52,15 @@ export async function PATCH(req: Request, ctx: Params) {
   }
 
   if (body.ban_user_id && body.banned_until) {
+    const resolvedBanId = await resolveUserIdFromAdminInput(svc, body.ban_user_id);
+    if (!resolvedBanId) {
+      return NextResponse.json({ error: "Пользователь для бана не найден (введите @handle канала)" }, { status: 400 });
+    }
     const banPatch: Record<string, unknown> = {
       banned_until: body.banned_until,
       ban_reason_code: body.ban_reason_code ?? null,
     };
-    const { error: banErr } = await svc.from("users").update(banPatch).eq("id", body.ban_user_id);
+    const { error: banErr } = await svc.from("users").update(banPatch).eq("id", resolvedBanId);
     if (banErr) {
       return NextResponse.json({ error: banErr.message }, { status: 400 });
     }

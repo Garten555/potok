@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseAdminUserSearchQuery, resolveUserIdFromAdminInput } from "@/lib/admin-user-search";
 import { requireAdmin } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -15,7 +16,7 @@ export type UnfreezeRequestRow = {
 const STATUS_FILTERS = ["pending", "approved", "rejected", "all"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-/** Список заявок на разморозку (только admin). Query: status=pending|approved|rejected|all, q=подстрока ника/названия (от 2 символов). */
+/** Список заявок на разморозку (только admin). Query: status=…, q=@handle / подстрока ника. */
 export async function GET(req: Request) {
   const gate = await requireAdmin();
   if (gate instanceof NextResponse) return gate;
@@ -47,9 +48,9 @@ export async function GET(req: Request) {
     query = query.in("unfreeze_request_status", ["pending", "rejected", "approved"]);
   }
 
-  if (q.length >= 2) {
-    const safe = q.replace(/[%_]/g, "").slice(0, 80);
-    const like = `%${safe}%`;
+  const parsedQ = parseAdminUserSearchQuery(q);
+  if (parsedQ) {
+    const like = `%${parsedQ.term}%`;
     query = query.or(`channel_name.ilike.${like},channel_handle.ilike.${like}`);
   }
 
@@ -74,16 +75,21 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const userId = typeof body.user_id === "string" ? body.user_id.trim() : "";
+  const rawId = typeof body.user_id === "string" ? body.user_id.trim() : "";
   const decision = body.decision;
-  if (!userId || !UUID_RE.test(userId)) {
-    return NextResponse.json({ error: "Нужен корректный user_id" }, { status: 400 });
+  if (!rawId) {
+    return NextResponse.json({ error: "Укажите user_id: @handle канала" }, { status: 400 });
   }
   if (decision !== "approved" && decision !== "rejected") {
     return NextResponse.json({ error: "decision: approved | rejected" }, { status: 400 });
   }
 
   const svc = createSupabaseServiceClient();
+  const userId = await resolveUserIdFromAdminInput(svc, rawId);
+  if (!userId) {
+    return NextResponse.json({ error: "Пользователь не найден (@handle канала)" }, { status: 400 });
+  }
+
   const { data: row, error: fetchErr } = await svc
     .from("users")
     .select("id, account_frozen_at, unfreeze_request_status")
@@ -128,6 +134,3 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
+import { resolveUserIdFromAdminInput } from "@/lib/admin-user-search";
 import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Включить/выключить верификацию канала (модератор или админ). */
 export async function POST(req: Request) {
@@ -17,13 +15,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const userId = (body.userId ?? "").trim();
-  if (!UUID_RE.test(userId)) {
-    return NextResponse.json({ error: "Некорректный userId" }, { status: 400 });
+  const rawId = (body.userId ?? "").trim();
+  if (!rawId) {
+    return NextResponse.json({ error: "Укажите userId: @handle канала" }, { status: 400 });
+  }
+
+  const svc = createSupabaseServiceClient();
+  const userId = await resolveUserIdFromAdminInput(svc, rawId);
+  if (!userId) {
+    return NextResponse.json({ error: "Пользователь не найден" }, { status: 400 });
   }
 
   const verified = Boolean(body.verified);
-  const svc = createSupabaseServiceClient();
   const { error } = await svc
     .from("users")
     .update({

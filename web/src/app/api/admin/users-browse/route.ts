@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseAdminUserSearchQuery } from "@/lib/admin-user-search";
 import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
       count: "exact",
     });
 
-  if (role && ["user", "moderator", "admin"].includes(role)) {
+  if (role && ["user", "moderator", "admin", "owner"].includes(role)) {
     query = query.eq("role", role);
   }
   if (verified === "yes") {
@@ -41,13 +42,10 @@ export async function GET(req: Request) {
     query = query.eq("channel_verified", false);
   }
 
-  if (rawQ.length >= 2) {
-    const term = rawQ.startsWith("@") ? rawQ.slice(1) : rawQ;
-    const safe = term.replace(/[%_]/g, "").slice(0, 80);
-    if (safe.length >= 2) {
-      const like = `%${safe}%`;
-      query = query.or(`channel_handle.ilike.${like},channel_name.ilike.${like}`);
-    }
+  const parsedQ = parseAdminUserSearchQuery(rawQ);
+  if (parsedQ) {
+    const like = `%${parsedQ.term}%`;
+    query = query.or(`channel_handle.ilike.${like},channel_name.ilike.${like}`);
   }
 
   const from = (page - 1) * limit;

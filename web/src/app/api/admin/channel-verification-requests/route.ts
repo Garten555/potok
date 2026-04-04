@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseAdminUserSearchQuery, resolveUserIdFromAdminInput } from "@/lib/admin-user-search";
 import { requireStaff } from "@/lib/server/staff-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -12,13 +13,10 @@ export type ChannelVerificationRequestRow = {
   channel_verification_request_status: string;
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 const STATUS_FILTERS = ["pending", "rejected", "all"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-/** Список заявок на галочку (модератор/админ). Query: status=pending|rejected|all, q — подстрока (от 2 символов). */
+/** Список заявок на галочку (модератор/админ). Query: status=…, q — @handle / подстрока. */
 export async function GET(req: Request) {
   const gate = await requireStaff();
   if (gate instanceof NextResponse) return gate;
@@ -50,13 +48,10 @@ export async function GET(req: Request) {
       .order("id", { ascending: false });
   }
 
-  if (rawQ.length >= 2) {
-    const safe = rawQ.startsWith("@") ? rawQ.slice(1) : rawQ;
-    const term = safe.replace(/[%_]/g, "").slice(0, 80);
-    if (term.length >= 2) {
-      const like = `%${term}%`;
-      query = query.or(`channel_name.ilike.${like},channel_handle.ilike.${like}`);
-    }
+  const parsedQ = parseAdminUserSearchQuery(rawQ);
+  if (parsedQ) {
+    const like = `%${parsedQ.term}%`;
+    query = query.or(`channel_name.ilike.${like},channel_handle.ilike.${like}`);
   }
 
   const { data, error } = await query;
@@ -80,16 +75,21 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const userId = typeof body.user_id === "string" ? body.user_id.trim() : "";
+  const rawId = typeof body.user_id === "string" ? body.user_id.trim() : "";
   const decision = body.decision;
-  if (!userId || !UUID_RE.test(userId)) {
-    return NextResponse.json({ error: "Нужен корректный user_id" }, { status: 400 });
+  if (!rawId) {
+    return NextResponse.json({ error: "Укажите user_id: @handle канала" }, { status: 400 });
   }
   if (decision !== "approved" && decision !== "rejected") {
     return NextResponse.json({ error: "decision: approved | rejected" }, { status: 400 });
   }
 
   const svc = createSupabaseServiceClient();
+  const userId = await resolveUserIdFromAdminInput(svc, rawId);
+  if (!userId) {
+    return NextResponse.json({ error: "Пользователь не найден (@handle канала)" }, { status: 400 });
+  }
+
   const { data: row, error: fetchErr } = await svc
     .from("users")
     .select("id, channel_verified, channel_verification_request_status")

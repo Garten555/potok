@@ -10,6 +10,7 @@ import type {
   ModerationReportsListResponse,
 } from "@/lib/moderation-reports-types";
 import clsx from "clsx";
+import { isAdminRole } from "@/lib/user-role";
 
 export type ReportRow = ModerationReportRow;
 
@@ -91,7 +92,7 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
   };
 
   const banFromReport = async (r: ModerationReportRow) => {
-    const uid = window.prompt("UUID пользователя для бана (или вставьте из цели жалобы)");
+    const uid = window.prompt("@handle пользователя для бана (как в URL канала, с @ или без)");
     if (!uid) return;
     const until = window.prompt("Дата окончания бана ISO, напр. 2099-12-31T00:00:00.000Z");
     if (!until) return;
@@ -124,7 +125,7 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
   };
 
   const filteredReasons = useMemo(() => REPORT_REASON_CODES, []);
-  const isAdmin = viewerRole === "admin";
+  const isAdmin = isAdminRole(viewerRole);
 
   const kindTabs: { id: typeof kindFilter; label: string }[] = [
     { id: "", label: "Все" },
@@ -140,19 +141,22 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Глобальная модерация сайта: видео, комментарии и каналы. Чтобы смотреть все жалобы, связанные с конкретным каналом,
-        укажите UUID владельца, @handle или часть названия канала / ника (если совпадение одно) — подтянутся жалобы
-        на канал, на его ролики и на комментарии под ними. Заметка при закрытии; бан по жалобе — только у администраторов.
+        Глобальная модерация: видео, комментарии и каналы. Фильтр по каналу — как везде в админке:{" "}
+        <strong className="text-slate-300">@handle</strong> или{" "}
+        <strong className="text-slate-300">подстрока</strong> ника (при однозначном совпадении подтянутся жалобы на канал, его
+        ролики и комментарии). Заметка при закрытии; бан по жалобе — только у администраторов.
       </p>
 
       <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
-        <label className="text-xs font-medium uppercase tracking-wide text-cyan-200/85">Фильтр по каналу</label>
+        <label className="text-xs font-medium uppercase tracking-wide text-cyan-200/85">
+          Поиск канала: @handle или подстрока
+        </label>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <input
             className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
-            placeholder="UUID, @handle или часть названия канала"
+            placeholder="@handle или подстрока ника"
           />
           <button
             type="button"

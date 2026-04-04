@@ -75,7 +75,8 @@ export function AdminUnfreezeSection() {
       <h1 className="text-xl font-semibold text-slate-100">Заявки на разморозку</h1>
       <p className="mt-1 text-sm text-slate-400">
         Пользователи с замороженным аккаунтом отправляют заявку. Одобрение снимает заморозку; отклонение оставляет аккаунт
-        замороженным. Ниже можно смотреть историю по статусам и искать по названию канала или нику.
+        замороженным. Поиск заявок — <strong className="text-slate-300">@handle</strong> или{" "}
+        <strong className="text-slate-300">подстрока</strong> ника (от 2 символов).
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -98,7 +99,7 @@ export function AdminUnfreezeSection() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
-          <label className="text-xs text-slate-500">Поиск по названию или @нику</label>
+          <label className="text-xs text-slate-500">Поиск: UUID, @handle или подстрока</label>
           <input
             className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={q}
@@ -106,7 +107,7 @@ export function AdminUnfreezeSection() {
             onKeyDown={(e) => {
               if (e.key === "Enter") setQApplied(q.trim());
             }}
-            placeholder="от 2 символов, затем «Найти»"
+            placeholder="@handle или подстрока"
           />
         </div>
         <button

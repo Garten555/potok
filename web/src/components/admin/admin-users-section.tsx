@@ -9,6 +9,7 @@ const ROLE_LABELS_RU: Record<string, string> = {
   user: "Пользователь",
   moderator: "Модератор",
   admin: "Администратор",
+  owner: "Владелец платформы",
 };
 
 function roleLabelRu(role: string | null | undefined): string {
@@ -33,11 +34,11 @@ export function AdminUsersSection() {
   const [single, setSingle] = useState<{ user: UserRow | null; email?: string | null } | null>(null);
   const [list, setList] = useState<UserRow[] | null>(null);
   const [verifySaving, setVerifySaving] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<"all" | "user" | "moderator" | "admin">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "user" | "moderator" | "admin" | "owner">("all");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "yes" | "no">("all");
 
   const [browsePage, setBrowsePage] = useState(1);
-  const [browseRole, setBrowseRole] = useState<"all" | "user" | "moderator" | "admin">("all");
+  const [browseRole, setBrowseRole] = useState<"all" | "user" | "moderator" | "admin" | "owner">("all");
   const [browseVerified, setBrowseVerified] = useState<"all" | "yes" | "no">("all");
   const [browseQ, setBrowseQ] = useState("");
   /** Подстрока поиска, уходящая в API (обновляется по «Применить» / Enter). */
@@ -121,14 +122,15 @@ export function AdminUsersSection() {
     }
   };
 
-  const setVerified = async (userId: string, verified: boolean) => {
+  const setVerified = async (user: UserRow, verified: boolean) => {
+    const apiKey = user.channel_handle ? `@${user.channel_handle}` : user.id;
     setVerifySaving(true);
     setError(null);
     try {
       const res = await fetch("/api/admin/channel-verified", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, verified }),
+        body: JSON.stringify({ userId: apiKey, verified }),
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -136,13 +138,13 @@ export function AdminUsersSection() {
         return;
       }
       setSingle((prev) =>
-        prev?.user && prev.user.id === userId
+        prev?.user && prev.user.id === user.id
           ? { ...prev, user: { ...prev.user, channel_verified: verified } }
           : prev,
       );
       setList((prev) =>
         prev
-          ? prev.map((u) => (u.id === userId ? { ...u, channel_verified: verified } : u))
+          ? prev.map((u) => (u.id === user.id ? { ...u, channel_verified: verified } : u))
           : prev,
       );
     } catch {
@@ -168,15 +170,15 @@ export function AdminUsersSection() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Пользователи</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Ниже — список пользователей с фильтрами и страницами. Отдельно: точный поиск по UUID, @handle или части ника;
-        для точного UUID показываем карточку и email из auth (если доступен service role на сервере).
+        Список с фильтрами и страницами и точный поиск по <strong className="text-slate-300">@handle</strong> (как в URL
+        канала) или по части ника. При однозначном совпадении в «Точном поиске» показываются карточка и email из auth (если
+        на сервере есть service role). Вставлять UUID в поиск не нужно.
       </p>
 
       <div className="mt-6 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4">
         <h2 className="text-sm font-medium text-cyan-100/90">Список пользователей</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Фильтры по роли и верификации; в поле «Подстрока» — от 2 символов по нику или @handle (или оставьте пустым для
-          всех).
+          Фильтры по роли и верификации. Поиск — @handle или подстрока; пустое поле — весь список по остальным фильтрам.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div>
@@ -193,6 +195,7 @@ export function AdminUsersSection() {
               <option value="user">Пользователь</option>
               <option value="moderator">Модератор</option>
               <option value="admin">Администратор</option>
+              <option value="owner">Владелец</option>
             </select>
           </div>
           <div>
@@ -211,7 +214,7 @@ export function AdminUsersSection() {
             </select>
           </div>
           <div className="min-w-[200px] flex-1">
-            <label className="text-xs text-slate-500">Подстрока ника / handle</label>
+            <label className="text-xs text-slate-500">Поиск: @handle или подстрока</label>
             <input
               className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-1.5 text-sm text-slate-100"
               value={browseQ}
@@ -222,7 +225,7 @@ export function AdminUsersSection() {
                   setBrowsePage(1);
                 }
               }}
-              placeholder="от 2 символов или пусто"
+              placeholder="пусто — все; иначе @handle или часть ника"
             />
           </div>
           <button
@@ -305,12 +308,12 @@ export function AdminUsersSection() {
       <h2 className="mt-10 text-lg font-medium text-slate-200">Точный поиск</h2>
       <div className="mt-6 flex flex-wrap items-end gap-3">
         <div className="min-w-[240px] flex-1">
-          <label className="text-xs text-slate-500">Запрос</label>
+          <label className="text-xs text-slate-500">Поиск: @handle или подстрока</label>
           <input
             className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2 text-sm text-slate-100"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="UUID, @handle или часть имени канала"
+            placeholder="@garten-f06e15 или часть ника"
             onKeyDown={(e) => e.key === "Enter" && void search()}
           />
         </div>
@@ -374,7 +377,7 @@ export function AdminUsersSection() {
                     className="h-4 w-4 rounded border-white/20 bg-[#0b1120] text-cyan-500 focus:ring-cyan-500/40"
                     checked={Boolean(single.user.channel_verified)}
                     disabled={verifySaving}
-                    onChange={(e) => void setVerified(single.user!.id, e.target.checked)}
+                    onChange={(e) => void setVerified(single.user!, e.target.checked)}
                   />
                   Верификация канала (галочка на сайте)
                 </label>
@@ -408,6 +411,7 @@ export function AdminUsersSection() {
                   <option value="user">Пользователь</option>
                   <option value="moderator">Модератор</option>
                   <option value="admin">Администратор</option>
+                  <option value="owner">Владелец</option>
                 </select>
               </div>
               <div>
