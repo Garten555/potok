@@ -186,15 +186,25 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
       )}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="mb-2 flex items-center gap-2 border-b border-white/8 pb-2.5">
+        <div
+          className={clsx(
+            "mb-2 flex items-center gap-2 border-b border-white/8 pb-2.5",
+            !showLabels && "lg:justify-center lg:gap-0",
+          )}
+        >
           <button
             type="button"
             onClick={onToggle}
             title={isOpen ? "Свернуть меню" : "Развернуть меню"}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10"
+            className={clsx(
+              "grid shrink-0 place-items-center text-slate-200 transition",
+              isOpen
+                ? "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10"
+                : "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10 max-lg:h-9 max-lg:w-9 max-lg:rounded-xl lg:h-8 lg:w-8 lg:rounded-lg lg:border-white/[0.07] lg:bg-white/[0.03] lg:hover:bg-white/[0.08]",
+            )}
             aria-label={isOpen ? "Свернуть меню" : "Открыть меню"}
           >
-            <Menu className={clsx("shrink-0", isOpen ? SIDEBAR_ICON_CLASS : "h-6 w-6")} />
+            <Menu className={clsx("shrink-0", SIDEBAR_ICON_CLASS)} />
           </button>
 
           {showLabels ? (
