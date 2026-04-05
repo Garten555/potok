@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import clsx from "clsx";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Flame,
   LogIn,
@@ -16,6 +17,7 @@ import {
   ListVideo,
 } from "lucide-react";
 import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
+import { HOME_FEED_QUERY_KEY, homeTrendingHref } from "@/lib/home-feed-param";
 import { studioPathForNav } from "@/lib/studio-view-param";
 
 type SidebarProps = {
@@ -24,9 +26,11 @@ type SidebarProps = {
   isAuthenticated: boolean;
 };
 
+const TRENDING_HREF = homeTrendingHref();
+
 const guestNavItems = [
   { label: "Главная", icon: Radio, href: "/" },
-  { label: "Тренды", icon: Flame, href: "/?tab=trending" },
+  { label: "Тренды", icon: Flame, href: TRENDING_HREF },
 ];
 
 const authNavItems = [
@@ -37,6 +41,133 @@ const authNavItems = [
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
   { label: "Ваши видео", icon: Video, href: studioPathForNav("content") },
 ];
+
+type NavItemConfig = (typeof guestNavItems)[number];
+
+function navItemIsActive(
+  item: NavItemConfig,
+  pathname: string,
+  isTrendingUrl: boolean,
+): boolean {
+  if (item.href === TRENDING_HREF) {
+    return pathname === "/" && isTrendingUrl;
+  }
+  if (item.href === "/") {
+    return pathname === "/" && !isTrendingUrl;
+  }
+  if (item.href === "/subscriptions") return pathname === "/subscriptions";
+  if (item.href === "/playlists") return pathname === "/playlists";
+  if (item.href === "/favorites") return pathname === "/favorites";
+  if (item.href === "/history") return pathname === "/history";
+  if (item.href.startsWith("/studio?")) return pathname === "/studio";
+  return false;
+}
+
+function SidebarPrimaryNav({
+  navItems,
+  pathname,
+  showLabels,
+  isOpen,
+  onToggle,
+}: {
+  navItems: NavItemConfig[];
+  pathname: string;
+  showLabels: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const isTrendingUrl =
+    searchParams.get(HOME_FEED_QUERY_KEY) === "t" || searchParams.get("tab") === "trending";
+
+  return (
+    <>
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        const isActive = navItemIsActive(item, pathname, isTrendingUrl);
+
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={() => {
+              if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                onToggle();
+              }
+            }}
+            className={clsx(
+              "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
+              isActive
+                ? "bg-[#2f74ff]/18 text-[#b7d9ff] shadow-[inset_0_0_0_1px_rgba(83,153,255,0.35)]"
+                : "text-slate-300 hover:bg-white/8 hover:text-white",
+            )}
+          >
+            <Icon className={SIDEBAR_ICON_CLASS} />
+            <span
+              className={clsx(
+                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
+                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
+              )}
+            >
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
+function SidebarPrimaryNavFallback({
+  navItems,
+  showLabels,
+  isOpen,
+  onToggle,
+}: {
+  navItems: NavItemConfig[];
+  showLabels: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={() => {
+              if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                onToggle();
+              }
+            }}
+            className={clsx(
+              "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+              showLabels
+                ? "w-full gap-3 px-3 py-2.5"
+                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
+              "text-slate-300 hover:bg-white/8 hover:text-white",
+            )}
+          >
+            <Icon className={SIDEBAR_ICON_CLASS} />
+            <span
+              className={clsx(
+                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
+                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
+              )}
+            >
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+    </>
+  );
+}
 
 export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
   /** На lg+ «открыт» = широкая панель; на мобильном — только выезд drawer */
@@ -90,54 +221,24 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pt-1 sm:gap-2 lg:gap-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.href === "/subscriptions"
-                ? pathname === "/subscriptions"
-                : item.href === "/playlists"
-                  ? pathname === "/playlists"
-                  : item.href === "/favorites"
-                    ? pathname === "/favorites"
-                    : item.href === "/history"
-                      ? pathname === "/history"
-                      : item.href.startsWith("/studio?")
-                        ? pathname === "/studio"
-                        : item.href === "/" && pathname === "/";
-
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={() => {
-                  if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
-                    onToggle();
-                  }
-                }}
-                className={clsx(
-                  "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
-                  showLabels
-                    ? "w-full gap-3 px-3 py-2.5"
-                    : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
-                  isActive
-                    ? "bg-[#2f74ff]/18 text-[#b7d9ff] shadow-[inset_0_0_0_1px_rgba(83,153,255,0.35)]"
-                    : "text-slate-300 hover:bg-white/8 hover:text-white",
-                )}
-              >
-                <Icon className={SIDEBAR_ICON_CLASS} />
-                <span
-                  className={clsx(
-                    "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                    showLabels
-                      ? "flex-1 whitespace-nowrap opacity-100"
-                      : "w-0 flex-none opacity-0",
-                  )}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+          <Suspense
+            fallback={
+              <SidebarPrimaryNavFallback
+                navItems={navItems}
+                showLabels={showLabels}
+                isOpen={isOpen}
+                onToggle={onToggle}
+              />
+            }
+          >
+            <SidebarPrimaryNav
+              navItems={navItems}
+              pathname={pathname}
+              showLabels={showLabels}
+              isOpen={isOpen}
+              onToggle={onToggle}
+            />
+          </Suspense>
         </nav>
 
         {!isAuthenticated ? (
