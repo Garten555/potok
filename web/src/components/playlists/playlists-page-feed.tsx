@@ -6,6 +6,7 @@ import { ListVideo, Clock } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
 import clsx from "clsx";
+import { studioPathForNav } from "@/lib/studio-view-param";
 
 type PlaylistRow = {
   id: string;
@@ -158,7 +159,7 @@ export function PlaylistsPageFeed() {
         <section className="mt-6 px-4 md:px-6 lg:px-8">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-slate-300">
             Плейлистов пока нет. Создайте свои в{" "}
-            <Link href="/studio?tab=playlists" className="text-cyan-200 underline hover:text-cyan-100">
+            <Link href={studioPathForNav("playlists")} className="text-cyan-200 underline hover:text-cyan-100">
               студии
             </Link>
             .
@@ -173,7 +174,7 @@ export function PlaylistsPageFeed() {
               const href =
                 firstVideoId != null
                   ? `/watch/${firstVideoId}?list=${encodeURIComponent(pl.id)}`
-                  : "/studio?tab=playlists";
+                  : studioPathForNav("playlists");
 
               return (
                 <Link

@@ -9,6 +9,7 @@ import { CommunityTab } from "@/components/channel/community-tab";
 import { VideoGridCard } from "@/components/video/video-grid-card";
 import { ChannelHomeSectionSlider } from "@/components/channel/channel-home-section-slider";
 import type { ChannelHomeSectionResolved, ChannelPlaylistCard, ChannelVideoItem } from "@/lib/channel-home-types";
+import { studioPathForNav } from "@/lib/studio-view-param";
 import { ChannelSpotlightStrip, type SpotlightChannel } from "@/components/channel/channel-spotlight-strip";
 
 export type { ChannelPlaylistCard } from "@/lib/channel-home-types";
@@ -336,7 +337,7 @@ export function ChannelTabs({
           ) : (
             <p className="mt-2 text-sm text-slate-400">
               Пока нет плейлистов канала. Создайте их в{" "}
-              <Link href="/studio?tab=playlists" className="text-cyan-200 underline hover:text-cyan-100">
+              <Link href={studioPathForNav("playlists")} className="text-cyan-200 underline hover:text-cyan-100">
                 студии
               </Link>
               .

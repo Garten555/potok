@@ -13,12 +13,10 @@ import {
   Settings,
   ThumbsUp,
   Video,
-  Scale,
-  Shield,
-  FileText,
   ListVideo,
 } from "lucide-react";
 import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
+import { studioPathForNav } from "@/lib/studio-view-param";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -37,7 +35,7 @@ const authNavItems = [
   { label: "История", icon: Clock, href: "/history" },
   { label: "Плейлисты", icon: ListVideo, href: "/playlists" },
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
-  { label: "Ваши видео", icon: Video, href: "/studio?tab=content" },
+  { label: "Ваши видео", icon: Video, href: studioPathForNav("content") },
 ];
 
 export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
@@ -73,13 +71,22 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
             <Menu className={SIDEBAR_ICON_CLASS} />
           </button>
 
-          <div
-            className={clsx(
-              "h-10 shrink-0 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat transition-[width,opacity] duration-300",
-              showLabels ? "w-36 opacity-100" : "w-0 opacity-0",
-            )}
-            aria-label="Логотип ПОТОК"
-          />
+          {showLabels ? (
+            <Link
+              href="/"
+              onClick={() => {
+                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                  onToggle();
+                }
+              }}
+              className={clsx(
+                "h-10 w-36 shrink-0 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat opacity-100 transition-opacity hover:opacity-90",
+              )}
+              aria-label="ПОТОК — на главную"
+            />
+          ) : (
+            <div className="h-10 w-0 shrink-0 opacity-0" aria-hidden />
+          )}
         </div>
 
         <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pt-1 sm:gap-2 lg:gap-2">
@@ -94,7 +101,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
                     ? pathname === "/favorites"
                     : item.href === "/history"
                       ? pathname === "/history"
-                      : item.href.startsWith("/studio")
+                      : item.href.startsWith("/studio?")
                         ? pathname === "/studio"
                         : item.href === "/" && pathname === "/";
 
@@ -163,47 +170,6 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
           )
         ) : null}
 
-        {showLabels ? (
-          <div className="mt-3 space-y-0.5 border-t border-white/8 pt-3">
-            <Link
-              href="/rules"
-              onClick={() => {
-                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
-                  onToggle();
-                }
-              }}
-              className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-400 transition hover:bg-white/8 hover:text-slate-200"
-            >
-              <Scale className={SIDEBAR_ICON_CLASS} />
-              <span className="min-w-0 leading-snug">Правила сервиса</span>
-            </Link>
-            <Link
-              href="/privacy"
-              onClick={() => {
-                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
-                  onToggle();
-                }
-              }}
-              className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-1.5 text-left text-[11px] font-medium text-slate-500 transition hover:bg-white/8 hover:text-slate-300"
-            >
-              <Shield className="h-4 w-4 shrink-0 text-slate-500" />
-              <span className="min-w-0 leading-snug">Политика персональных данных</span>
-            </Link>
-            <Link
-              href="/offer"
-              onClick={() => {
-                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
-                  onToggle();
-                }
-              }}
-              className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-1.5 text-left text-[11px] font-medium text-slate-500 transition hover:bg-white/8 hover:text-slate-300"
-            >
-              <FileText className="h-4 w-4 shrink-0 text-slate-500" />
-              <span className="min-w-0 leading-snug">Пользовательское соглашение</span>
-            </Link>
-          </div>
-        ) : null}
-
         <div className="mt-auto border-t border-white/8 pt-3">
           <Link
             href="/settings"
@@ -231,8 +197,50 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               Настройки
             </span>
           </Link>
+
           {showLabels ? (
-            <p className="mt-3 px-1 text-center text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500/90">
+            <nav
+              className="mt-3 space-y-1 border-t border-white/[0.06] pt-2.5"
+              aria-label="Правовая информация"
+            >
+              <Link
+                href="/rules"
+                onClick={() => {
+                  if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                    onToggle();
+                  }
+                }}
+                className="block rounded-md px-1 py-0.5 text-[10px] leading-snug text-slate-600 transition hover:text-slate-400"
+              >
+                Правила сервиса
+              </Link>
+              <Link
+                href="/privacy"
+                onClick={() => {
+                  if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                    onToggle();
+                  }
+                }}
+                className="block rounded-md px-1 py-0.5 text-[10px] leading-snug text-slate-600 transition hover:text-slate-400"
+              >
+                Политика персональных данных
+              </Link>
+              <Link
+                href="/offer"
+                onClick={() => {
+                  if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                    onToggle();
+                  }
+                }}
+                className="block rounded-md px-1 py-0.5 text-[10px] leading-snug text-slate-600 transition hover:text-slate-400"
+              >
+                Пользовательское соглашение
+              </Link>
+            </nav>
+          ) : null}
+
+          {showLabels ? (
+            <p className="mt-2.5 px-1 text-center text-[9px] font-medium uppercase tracking-[0.18em] text-slate-600/80">
               © ПОТОК · 2026
             </p>
           ) : null}

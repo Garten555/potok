@@ -20,6 +20,7 @@ import {
   USER_SESSION_ROLE_EVENT,
   userNotificationsChannelName,
 } from "@/lib/pusher/user-notifications";
+import { studioPathForNav } from "@/lib/studio-view-param";
 
 type HeaderProfile = {
   id: string;
@@ -809,7 +810,7 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                     Мой канал
                   </Link>
                   <Link
-                    href="/studio?tab=upload"
+                    href={studioPathForNav("upload")}
                     className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
                     onClick={() => setIsMenuOpen(false)}
                   >

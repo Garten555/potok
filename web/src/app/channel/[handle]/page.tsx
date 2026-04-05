@@ -12,6 +12,7 @@ import { SubscribeButton } from "@/components/channel/subscribe-button";
 import { ChannelReportButton } from "@/components/channel/channel-report-button";
 import type { ChannelHomeSectionResolved, ChannelVideoItem } from "@/lib/channel-home-types";
 import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
+import { studioPathForNav } from "@/lib/studio-view-param";
 
 function playAllHrefUploads(videos: ChannelVideoItem[]): string | null {
   const first = videos[0];
@@ -387,13 +388,13 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
               {isOwner ? (
                 <>
                   <Link
-                    href="/studio?tab=channel-home"
+                    href={studioPathForNav("channel_home")}
                     className="rounded-lg border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10 sm:text-sm"
                   >
                     Внешний вид канала
                   </Link>
                   <Link
-                    href="/studio?tab=upload"
+                    href={studioPathForNav("upload")}
                     className="rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/30 sm:text-sm"
                   >
                     Загрузить видео

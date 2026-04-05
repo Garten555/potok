@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ChannelSpotlightLinksForm } from "@/components/studio/channel-spotlight-editor";
 import type { ChannelHomeLayoutRow, ChannelPlaylistCard } from "@/lib/channel-home-types";
+import { studioPathForNav } from "@/lib/studio-view-param";
 
 export type ChannelHomeLayoutEditorProps = {
   channelUserId: string;
@@ -349,12 +350,12 @@ export function ChannelHomeLayoutEditor({
             setError("");
             if (draft.length >= MAX_SECTIONS) return;
             if (channelPlaylists.length === 0) {
-              router.push("/studio?tab=playlists");
+              router.push(studioPathForNav("playlists"));
               return;
             }
             const available = channelPlaylists.find((p) => !usedPlaylistIds.has(p.id));
             if (!available) {
-              router.push("/studio?tab=playlists");
+              router.push(studioPathForNav("playlists"));
               return;
             }
             setDraft((prev) => [

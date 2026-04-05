@@ -66,13 +66,15 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
           >
             <Menu className={SIDEBAR_ICON_CLASS} />
           </button>
-          <div
-            className={clsx(
-              "h-10 shrink-0 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat transition-[width,opacity] duration-300",
-              showLabels ? "w-36 opacity-100" : "w-0 overflow-hidden opacity-0",
-            )}
-            aria-label="ПОТОК"
-          />
+          {showLabels ? (
+            <Link
+              href="/"
+              className="h-10 w-36 shrink-0 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat opacity-100 transition-opacity hover:opacity-90"
+              aria-label="ПОТОК — на главную"
+            />
+          ) : (
+            <div className="h-10 w-0 shrink-0 overflow-hidden opacity-0" aria-hidden />
+          )}
           <button
             type="button"
             aria-label="Закрыть меню"

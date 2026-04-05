@@ -17,6 +17,13 @@ import { Menu } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fuzzyFilterEntities } from "@/lib/fuzzy-text-search";
 import { moderationStudioBannerText } from "@/lib/moderation-banner";
+import {
+  isStudioViewCodeValid,
+  parseStudioNavFromSearchParams,
+  studioPathForNav,
+  STUDIO_VIEW_QUERY_KEY,
+  type StudioNav,
+} from "@/lib/studio-view-param";
 import { SIDEBAR_ICON_CLASS } from "@/components/layout/sidebar-icons";
 import { StudioBrandHero } from "@/components/studio/studio-brand-hero";
 import { StudioSidebar } from "@/components/studio/studio-sidebar";
@@ -333,13 +340,9 @@ function StudioInner() {
   const router = useRouter();
 
   const goToStudioTab = useCallback(
-    (
-      nav: "upload" | "content" | "playlists" | "stats" | "channel_home" | "incoming_reports",
-    ) => {
-      const tab =
-        nav === "channel_home" ? "channel-home" : nav === "incoming_reports" ? "incoming-reports" : nav;
+    (nav: StudioNav) => {
       setActiveNav(nav);
-      router.replace(`/studio?tab=${tab}`, { scroll: false });
+      router.replace(studioPathForNav(nav), { scroll: false });
     },
     [router],
   );
@@ -352,15 +355,23 @@ function StudioInner() {
   };
 
   useEffect(() => {
-    // sidebar "Ваши видео" -> /studio?tab=content
-    const tab = sp?.get("tab");
-    if (tab === "upload") setActiveNav("upload");
-    else if (tab === "playlists") setActiveNav("playlists");
-    else if (tab === "content") setActiveNav("content");
-    else if (tab === "stats") setActiveNav("stats");
-    else if (tab === "channel-home") setActiveNav("channel_home");
-    else if (tab === "incoming-reports") setActiveNav("incoming_reports");
+    const nav = parseStudioNavFromSearchParams(sp);
+    if (nav) setActiveNav(nav);
   }, [sp]);
+
+  /** Старые `?tab=` → `?v=`; битый `v` → раздел загрузки. */
+  useEffect(() => {
+    const v = sp.get(STUDIO_VIEW_QUERY_KEY);
+    const tab = sp.get("tab");
+    if (tab != null && v == null) {
+      const nav = parseStudioNavFromSearchParams(sp);
+      if (nav) router.replace(studioPathForNav(nav), { scroll: false });
+      return;
+    }
+    if (v != null && !isStudioViewCodeValid(v)) {
+      router.replace(studioPathForNav("upload"), { scroll: false });
+    }
+  }, [sp, router]);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
