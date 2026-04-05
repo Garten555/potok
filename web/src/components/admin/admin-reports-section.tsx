@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { REPORT_REASON_CODES, reportReasonLabel } from "@/lib/report-reasons";
@@ -143,7 +144,8 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-xl font-semibold text-slate-100">Жалобы</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Очередь жалоб по видео, комментариям и каналам. Фильтр по каналу: укажите{" "}
+        Для жалоб на видео сначала откройте «Смотреть видео» в новой вкладке, затем принимайте решение. Очередь по видео,
+        комментариям и каналам. Фильтр по каналу: укажите{" "}
         <strong className="text-slate-300">@handle</strong> или <strong className="text-slate-300">подстроку</strong> ника;
         при однозначном совпадении показываются связанные с каналом жалобы, в том числе на публикации и комментарии. При
         закрытии заявки можно добавить служебный комментарий. Блокировка пользователя по жалобе доступна администраторам.
@@ -306,6 +308,16 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
                   {r.details ? <p className="mt-2 text-slate-300">{r.details}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {r.target_type === "video" ? (
+                    <Link
+                      href={`/watch/${encodeURIComponent(r.target_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-sky-400/35 bg-sky-500/15 px-2 py-1 text-xs font-medium text-sky-100 transition hover:bg-sky-500/25"
+                    >
+                      Смотреть видео
+                    </Link>
+                  ) : null}
                   <button
                     type="button"
                     className={clsx(
