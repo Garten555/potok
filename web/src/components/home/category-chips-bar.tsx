@@ -28,7 +28,7 @@ type CategoryChipsBarProps = {
 const SCROLL_STEP = 420;
 
 /**
- * Полоса категорий: стрелки с lg, свайп на мобильных, градиенты при переполнении.
+ * Полоса категорий: стрелки на всех ширинах (в т.ч. адаптив), свайп по ряду, градиенты при переполнении.
  */
 export function CategoryChipsBar({ activeCategory, onCategoryChange }: CategoryChipsBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -99,14 +99,14 @@ export function CategoryChipsBar({ activeCategory, onCategoryChange }: CategoryC
 
   return (
     <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-cyan-500/15 bg-gradient-to-r from-[#0a101c]/95 via-[#0d1526]/95 to-[#0a101c]/95 backdrop-blur-md">
-      <div className="flex w-full min-w-0 max-w-full items-center gap-1 px-2 py-2 sm:gap-2 sm:px-3 md:px-4 lg:px-6">
+      <div className="flex w-full min-w-0 max-w-full items-center gap-0.5 px-1 py-2 sm:gap-2 sm:px-3 md:px-4 lg:px-6">
         <button
           type="button"
           aria-label="Прокрутить категории влево"
           onClick={() => scrollByDir(-1)}
           disabled={!canScrollLeft}
           className={clsx(
-            "hidden h-8 w-8 shrink-0 place-items-center rounded-full border transition sm:h-9 sm:w-9 lg:grid",
+            "grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full border transition active:scale-[0.97] sm:h-10 sm:w-10",
             "border-cyan-400/20 bg-slate-950/60 text-cyan-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.12)]",
             canScrollLeft
               ? "hover:border-cyan-300/45 hover:bg-cyan-950/40 hover:text-cyan-50 hover:shadow-[0_0_18px_rgba(34,211,238,0.22)]"
@@ -174,7 +174,7 @@ export function CategoryChipsBar({ activeCategory, onCategoryChange }: CategoryC
           onClick={() => scrollByDir(1)}
           disabled={!canScrollRight}
           className={clsx(
-            "hidden h-8 w-8 shrink-0 place-items-center rounded-full border transition sm:h-9 sm:w-9 lg:grid",
+            "grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full border transition active:scale-[0.97] sm:h-10 sm:w-10",
             "border-cyan-400/20 bg-slate-950/60 text-cyan-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.12)]",
             canScrollRight
               ? "hover:border-cyan-300/45 hover:bg-cyan-950/40 hover:text-cyan-50 hover:shadow-[0_0_18px_rgba(34,211,238,0.22)]"
