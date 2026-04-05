@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPusherClient } from "@/lib/pusher/client";
+import { formatViewCountRu } from "@/lib/format-view-count-ru";
 
 type WatchViewsProps = {
   videoId: string;
@@ -29,6 +30,6 @@ export function WatchViews({ videoId, initialViews }: WatchViewsProps) {
     };
   }, [pusher, videoId]);
 
-  return <>{views.toLocaleString("ru-RU")} просмотров</>;
+  return <>{formatViewCountRu(views)}</>;
 }
 

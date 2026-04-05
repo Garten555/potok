@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChannelAvatar } from "@/components/channel/channel-avatar";
 import { formatPublishedAgo } from "@/lib/format-published-ago";
+import { formatViewCountRu } from "@/lib/format-view-count-ru";
 
 export type VideoGridCardProps = {
   videoId: string;
@@ -37,7 +38,7 @@ export function VideoGridCard({
   avatarUrl,
 }: VideoGridCardProps) {
   const publishedLabel = formatPublishedAgo(createdAt, nowMs);
-  const viewCount = (views ?? 0).toLocaleString("ru-RU");
+  const viewsLabel = formatViewCountRu(views);
   const metaChannel =
     layout === "home" ? (
       <>
@@ -49,7 +50,7 @@ export function VideoGridCard({
   const metaTail = (
     <>
       {metaChannel}
-      {viewCount} просмотров
+      {viewsLabel}
       {publishedLabel ? (
         <>
           <span className="mx-1 text-slate-600">·</span>

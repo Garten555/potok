@@ -1,8 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { VideoGridCard } from "@/components/video/video-grid-card";
 import type { ChannelVideoItem } from "@/lib/channel-home-types";
 
@@ -16,6 +14,7 @@ type ChannelHomeSectionSliderProps = {
   showPlayAllButton?: boolean;
 };
 
+/** Сетка карточек как на главной сайта (YouTube-подобно), без горизонтального скролла. */
 export function ChannelHomeSectionSlider({
   title,
   videos,
@@ -24,15 +23,6 @@ export function ChannelHomeSectionSlider({
   playAllHref,
   showPlayAllButton = true,
 }: ChannelHomeSectionSliderProps) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-
-  const scrollByPage = useCallback((dir: -1 | 1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const step = Math.min(el.clientWidth * 0.75, 420) * dir;
-    el.scrollBy({ left: step, behavior: "smooth" });
-  }, []);
-
   if (videos.length === 0) {
     return (
       <section className="min-w-0">
@@ -44,7 +34,6 @@ export function ChannelHomeSectionSlider({
     );
   }
 
-  const showArrows = videos.length > 2;
   const showPlayAll = Boolean(playAllHref) && showPlayAllButton;
 
   return (
@@ -61,36 +50,15 @@ export function ChannelHomeSectionSlider({
             </Link>
           ) : null}
         </div>
-        {showArrows ? (
-          <div className="flex shrink-0 gap-1 self-end sm:self-center">
-            <button
-              type="button"
-              onClick={() => scrollByPage(-1)}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/10"
-              aria-label="Прокрутить влево"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollByPage(1)}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.05] text-slate-200 transition hover:bg-white/10"
-              aria-label="Прокрутить вправо"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        ) : null}
       </div>
       <div
-        ref={scrollerRef}
-        className="-mx-1 flex gap-4 overflow-x-auto overscroll-x-contain px-1 pb-2 pt-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent]"
+        className={
+          "grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 sm:gap-x-4 " +
+          "lg:grid-cols-3 xl:grid-cols-4"
+        }
       >
         {videos.map((video) => (
-          <div
-            key={video.id}
-            className="w-[min(calc(100vw-2.5rem),280px)] shrink-0 snap-start sm:w-[300px]"
-          >
+          <div key={video.id} className="min-w-0">
             <VideoGridCard
               layout="channel"
               videoId={video.id}
