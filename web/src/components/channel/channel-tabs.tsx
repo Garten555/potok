@@ -40,6 +40,9 @@ const tabs: Array<{ id: TabId; label: string }> = [
   { id: "about", label: "О канале" },
 ];
 
+/** Согласовано с CommunityTab: публикация постов только при ≥ этого числа подписчиков. */
+const COMMUNITY_MIN_SUBSCRIBERS = 2;
+
 function PlaylistStackIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -124,6 +127,19 @@ export function ChannelTabs({
     );
   }, [channelVideos, videoSearchQ]);
 
+  const showCommunityTab = subscribersCount >= COMMUNITY_MIN_SUBSCRIBERS;
+
+  const visibleTabs = useMemo(
+    () => (showCommunityTab ? tabs : tabs.filter((t) => t.id !== "community")),
+    [showCommunityTab],
+  );
+
+  useEffect(() => {
+    if (!showCommunityTab && activeTab === "community") {
+      setActiveTab("home");
+    }
+  }, [showCommunityTab, activeTab]);
+
   return (
     <>
       <div
@@ -132,7 +148,7 @@ export function ChannelTabs({
       >
         <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
           <nav className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Разделы канала">
-            {tabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"

@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createPusherClient } from "@/lib/pusher/client";
+import { triggerPusherEvent } from "@/lib/pusher/trigger";
+import {
+  COMMUNITY_POSTS_UPDATED_EVENT,
+  communityPostsPusherChannel,
+} from "@/lib/pusher/community-posts";
 
 type CommunityPost = {
   id: string;
@@ -18,6 +24,7 @@ type CommunityTabProps = {
 
 export function CommunityTab({ channelId, isOwner, subscribersCount }: CommunityTabProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const pusher = useMemo(() => createPusherClient(), []);
   const [items, setItems] = useState<CommunityPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,25 +33,39 @@ export function CommunityTab({ channelId, isOwner, subscribersCount }: Community
 
   const canPublish = isOwner && subscribersCount >= 2;
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setIsLoading(true);
+  const loadPosts = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setIsLoading(true);
       const { data } = await supabase
         .from("community_posts")
         .select("id, content, created_at")
         .eq("user_id", channelId)
         .order("created_at", { ascending: false })
         .limit(50);
-      if (!active) return;
       setItems((data ?? []) as CommunityPost[]);
       setIsLoading(false);
+    },
+    [channelId, supabase],
+  );
+
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
+
+  useEffect(() => {
+    const channelName = communityPostsPusherChannel(channelId);
+    const channel = pusher.subscribe(channelName);
+    const handler = (data: unknown) => {
+      const payload = typeof data === "object" && data ? (data as { channelId?: string }) : {};
+      if (payload.channelId && payload.channelId !== channelId) return;
+      void loadPosts({ silent: true });
     };
-    void load();
+    channel.bind(COMMUNITY_POSTS_UPDATED_EVENT, handler);
     return () => {
-      active = false;
+      channel.unbind(COMMUNITY_POSTS_UPDATED_EVENT, handler);
+      pusher.unsubscribe(channelName);
     };
-  }, [channelId, supabase]);
+  }, [pusher, channelId, loadPosts]);
 
   const onPublish = async () => {
     if (!canPublish) return;
@@ -73,6 +94,11 @@ export function CommunityTab({ channelId, isOwner, subscribersCount }: Community
     }
     setItems((prev) => [data as CommunityPost, ...prev]);
     setContent("");
+    void triggerPusherEvent({
+      channel: communityPostsPusherChannel(channelId),
+      event: COMMUNITY_POSTS_UPDATED_EVENT,
+      payload: { channelId },
+    });
   };
 
   const onDelete = async (id: string) => {
@@ -82,6 +108,11 @@ export function CommunityTab({ channelId, isOwner, subscribersCount }: Community
       return;
     }
     setItems((prev) => prev.filter((p) => p.id !== id));
+    void triggerPusherEvent({
+      channel: communityPostsPusherChannel(channelId),
+      event: COMMUNITY_POSTS_UPDATED_EVENT,
+      payload: { channelId },
+    });
   };
 
   return (
@@ -89,11 +120,6 @@ export function CommunityTab({ channelId, isOwner, subscribersCount }: Community
       {isOwner ? (
         <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <h3 className="text-base font-semibold text-slate-100">Новый пост</h3>
-          {subscribersCount < 2 ? (
-            <p className="mt-2 text-sm text-amber-200/90">
-              Сообщество откроется после 2 подписчиков. Сейчас: {subscribersCount}.
-            </p>
-          ) : null}
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
