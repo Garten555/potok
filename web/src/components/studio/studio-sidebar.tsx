@@ -3,7 +3,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { BarChart3, Flag, Home, LayoutGrid, ListVideo, Menu, UploadCloud, Video, X } from "lucide-react";
-import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
+import { SIDEBAR_ICON_CLASS, SIDEBAR_ICON_RAIL_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 import {
   usePotokSidebarExpanded,
   useSidebarShowLabels,
@@ -28,6 +28,30 @@ const navBtnClass = (active: boolean, showLabels: boolean) =>
       : "text-slate-300 hover:bg-white/8 hover:text-white",
   );
 
+const STUDIO_NAV_ROWS: Array<{
+  id: StudioSidebarProps["activeNav"];
+  label: string;
+  hint: string;
+  Icon: typeof UploadCloud;
+}> = [
+  {
+    id: "upload",
+    label: "Загрузка видео",
+    hint: "Новый ролик: файл, описание, превью и публикация",
+    Icon: UploadCloud,
+  },
+  { id: "content", label: "Ваши видео", hint: "Библиотека роликов, редактирование и удаление", Icon: Video },
+  { id: "stats", label: "Статистика", hint: "Просмотры, подписчики и графики канала", Icon: BarChart3 },
+  { id: "playlists", label: "Плейлисты", hint: "Сборки роликов для канала и для себя", Icon: ListVideo },
+  { id: "channel_home", label: "Внешний вид канала", hint: "Главная страница канала и секции", Icon: LayoutGrid },
+  {
+    id: "incoming_reports",
+    label: "Жалобы на контент",
+    hint: "Обращения зрителей на ваши видео и канал",
+    Icon: Flag,
+  },
+];
+
 export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }: StudioSidebarProps) {
   const { expanded, toggleExpanded } = usePotokSidebarExpanded();
   const showLabels = useSidebarShowLabels(expanded, mobileOpen);
@@ -48,7 +72,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
         "max-lg:w-[min(18rem,88vw)] max-lg:overflow-y-auto max-lg:px-3 max-lg:py-2.5",
         mobileOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
         "lg:pointer-events-auto lg:sticky lg:top-0 lg:z-auto lg:translate-x-0",
-        expanded ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[4.8rem] lg:px-2.5 lg:py-2",
+        expanded ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.25rem] lg:px-1.5 lg:py-2",
         "max-h-screen overflow-y-auto lg:self-start",
       )}
     >
@@ -62,9 +86,10 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
               }
             }}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 max-lg:hidden"
+            title={expanded ? "Свернуть меню студии" : "Развернуть меню студии"}
             aria-label={expanded ? "Свернуть меню студии" : "Развернуть меню студии"}
           >
-            <Menu className={SIDEBAR_ICON_CLASS} />
+            <Menu className={clsx(expanded ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS)} />
           </button>
           {showLabels ? (
             <Link
@@ -80,83 +105,38 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
             aria-label="Закрыть меню"
             onClick={onMobileClose}
             className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 lg:hidden"
+            title="Закрыть меню"
           >
             <X className={SIDEBAR_ICON_CLASS} />
           </button>
         </div>
 
         <nav className="flex flex-col gap-1.5 pt-1 sm:gap-2">
-          <button type="button" onClick={() => handleSelect("upload")} className={navBtnClass(activeNav === "upload", showLabels)}>
-            <UploadCloud className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
+          {STUDIO_NAV_ROWS.map(({ id, label, hint, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              title={`${label} — ${hint}`}
+              onClick={() => handleSelect(id)}
+              className={navBtnClass(activeNav === id, showLabels)}
             >
-              Загрузка видео
-            </span>
-          </button>
-          <button type="button" onClick={() => handleSelect("content")} className={navBtnClass(activeNav === "content", showLabels)}>
-            <Video className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
-            >
-              Ваши видео
-            </span>
-          </button>
-          <button type="button" onClick={() => handleSelect("stats")} className={navBtnClass(activeNav === "stats", showLabels)}>
-            <BarChart3 className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
-            >
-              Статистика
-            </span>
-          </button>
-          <button type="button" onClick={() => handleSelect("playlists")} className={navBtnClass(activeNav === "playlists", showLabels)}>
-            <ListVideo className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
-            >
-              Плейлисты
-            </span>
-          </button>
-          <button type="button" onClick={() => handleSelect("channel_home")} className={navBtnClass(activeNav === "channel_home", showLabels)}>
-            <LayoutGrid className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
-            >
-              Внешний вид канала
-            </span>
-          </button>
-          <button type="button" onClick={() => handleSelect("incoming_reports")} className={navBtnClass(activeNav === "incoming_reports", showLabels)}>
-            <Flag className={SIDEBAR_ICON_CLASS} />
-            <span
-              className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
-              )}
-            >
-              Жалобы на контент
-            </span>
-          </button>
+              <Icon className={showLabels ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS} />
+              <span
+                className={clsx(
+                  "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
+                  showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          ))}
         </nav>
 
         <div className="mt-4 shrink-0 border-t border-white/8 pt-3">
           <Link
             href="/"
+            title="На главную — выйти из студии на сайт"
             onClick={onMobileClose}
             className={clsx(
               "flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
@@ -165,7 +145,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
                 : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Home className={clsx(SIDEBAR_ICON_CLASS, "text-slate-300")} />
+            <Home className={clsx(showLabels ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS, "text-slate-300")} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",

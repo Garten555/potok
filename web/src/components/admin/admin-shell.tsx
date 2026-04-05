@@ -19,7 +19,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAdminStaff } from "@/components/admin/admin-staff-context";
 import { isAdminRole, isOwnerRole, staffRoleLabelRu } from "@/lib/user-role";
-import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
+import {
+  SIDEBAR_ICON_CLASS,
+  SIDEBAR_ICON_RAIL_CLASS,
+  SIDEBAR_NAV_COLLAPSED_SQ,
+} from "@/components/layout/sidebar-icons";
 import {
   usePotokSidebarExpanded,
   useSidebarShowLabels,
@@ -37,13 +41,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
-  const navItems: { href: string; label: string; Icon: typeof LayoutDashboard }[] = [
-    { href: "/admin/overview", label: "Обзор", Icon: LayoutDashboard },
-    { href: "/admin/reports", label: "Жалобы", Icon: Flag },
-    { href: "/admin/verification-requests", label: "Верификация", Icon: BadgeCheck },
-    ...(admin ? [{ href: "/admin/unfreeze", label: "Разморозка", Icon: Unlock }] : []),
-    ...(admin ? [{ href: "/admin/team", label: "Модераторы", Icon: Users }] : []),
-    { href: "/admin/users", label: "Пользователи", Icon: UserSearch },
+  const navItems: { href: string; label: string; hint: string; Icon: typeof LayoutDashboard }[] = [
+    { href: "/admin/overview", label: "Обзор", hint: "сводка платформы и метрики", Icon: LayoutDashboard },
+    { href: "/admin/reports", label: "Жалобы", hint: "очередь жалоб пользователей", Icon: Flag },
+    {
+      href: "/admin/verification-requests",
+      label: "Верификация",
+      hint: "заявки на галочку канала",
+      Icon: BadgeCheck,
+    },
+    ...(admin
+      ? [{ href: "/admin/unfreeze", label: "Разморозка", hint: "заявки на снятие заморозки", Icon: Unlock }]
+      : []),
+    ...(admin
+      ? [{ href: "/admin/team", label: "Модераторы", hint: "роли команды модерации", Icon: Users }]
+      : []),
+    { href: "/admin/users", label: "Пользователи", hint: "поиск и карточки аккаунтов", Icon: UserSearch },
   ];
 
   return (
@@ -86,7 +99,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           mobileOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
           /* self-start + h-screen: иначе flex растягивает колонку на высоту main и sticky не «липнет» к вьюпорту */
           "lg:pointer-events-auto lg:sticky lg:top-0 lg:z-0 lg:h-screen lg:max-h-screen lg:shrink-0 lg:self-start lg:translate-x-0 lg:shadow-none",
-          expanded ? "lg:w-60 xl:w-64" : "lg:w-[4.8rem]",
+          expanded ? "lg:w-60 xl:w-64" : "lg:w-[5.25rem]",
         )}
       >
         <div className="border-b border-amber-500/15 px-3 py-4 lg:px-2 lg:py-5">
@@ -94,10 +107,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 max-lg:hidden"
+              title={expanded ? "Свернуть меню админки" : "Развернуть меню админки"}
               aria-label={expanded ? "Свернуть меню" : "Развернуть меню"}
               onClick={toggleExpanded}
             >
-              <Menu className={SIDEBAR_ICON_CLASS} />
+              <Menu className={expanded ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS} />
             </button>
             <Link
               href="/"
@@ -136,7 +150,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex flex-col gap-0.5 px-2 py-3">
-          {navItems.map(({ href, label, Icon }) => {
+          {navItems.map(({ href, label, hint, Icon }) => {
             const active =
               pathname === href ||
               (href === "/admin/overview" && pathname === "/admin") ||
@@ -145,6 +159,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={href}
                 href={href}
+                title={`${label} — ${hint}`}
                 className={clsx(
                   "flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium transition",
                   showLabels ? "px-3" : "justify-center px-0 lg:justify-center",
@@ -153,7 +168,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
                 )}
               >
-                <Icon className={clsx(SIDEBAR_ICON_CLASS, active ? "text-amber-200" : "text-slate-500")} />
+                <Icon
+                  className={clsx(
+                    showLabels ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS,
+                    active ? "text-amber-200" : "text-slate-500",
+                  )}
+                />
                 <span
                   className={clsx(
                     "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -170,6 +190,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="mt-4 shrink-0 border-t border-white/10 p-3">
           <Link
             href="/"
+            title="На главную — выйти из админки на сайт"
             className={clsx(
               "flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white",
               showLabels
@@ -177,7 +198,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Home className={clsx(SIDEBAR_ICON_CLASS, "text-slate-300")} />
+            <Home className={clsx(showLabels ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS, "text-slate-300")} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
@@ -189,6 +210,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/settings"
+            title="Настройки аккаунта — профиль и безопасность"
             className={clsx(
               "mt-1 flex min-w-0 items-center rounded-xl text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-200",
               showLabels
@@ -196,7 +218,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
             )}
           >
-            <Settings className={SIDEBAR_ICON_CLASS} />
+            <Settings className={showLabels ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS} />
             <span
               className={clsx(
                 "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",

@@ -4,19 +4,8 @@ import { Suspense } from "react";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import {
-  Flame,
-  LogIn,
-  Menu,
-  Clock,
-  Radio,
-  Tv,
-  Settings,
-  ThumbsUp,
-  Video,
-  ListVideo,
-} from "lucide-react";
-import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
+import { Flame, LogIn, Menu, Radio, Tv, Settings, ThumbsUp, Video, ListVideo } from "lucide-react";
+import { SIDEBAR_ICON_CLASS } from "@/components/layout/sidebar-icons";
 import { HOME_FEED_QUERY_KEY, homeTrendingHref } from "@/lib/home-feed-param";
 import { studioPathForNav } from "@/lib/studio-view-param";
 
@@ -33,13 +22,13 @@ const guestNavItems = [
   { label: "Тренды", icon: Flame, href: TRENDING_HREF },
 ];
 
+/** Без «История» — раздел в шапке / отдельный URL; в узкой колонке только самое ходовое. */
 const authNavItems = [
   { label: "Главная", icon: Radio, href: "/" },
   { label: "Подписки", icon: Tv, href: "/subscriptions" },
-  { label: "История", icon: Clock, href: "/history" },
   { label: "Плейлисты", icon: ListVideo, href: "/playlists" },
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
-  { label: "Ваши видео", icon: Video, href: studioPathForNav("content") },
+  { label: "Студия", icon: Video, href: studioPathForNav("content") },
 ];
 
 type NavItemConfig = (typeof guestNavItems)[number];
@@ -58,7 +47,6 @@ function navItemIsActive(
   if (item.href === "/subscriptions") return pathname === "/subscriptions";
   if (item.href === "/playlists") return pathname === "/playlists";
   if (item.href === "/favorites") return pathname === "/favorites";
-  if (item.href === "/history") return pathname === "/history";
   if (item.href.startsWith("/studio?")) return pathname === "/studio";
   return false;
 }
@@ -90,26 +78,29 @@ function SidebarPrimaryNav({
           <Link
             key={item.label}
             href={item.href}
+            title={item.label}
             onClick={() => {
               if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
                 onToggle();
               }
             }}
             className={clsx(
-              "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+              "group flex min-w-0 rounded-xl text-sm font-medium transition",
               showLabels
-                ? "w-full gap-3 px-3 py-2.5"
-                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
+                ? "w-full flex-row items-center gap-3 px-3 py-2.5 text-left"
+                : "w-full flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-center",
               isActive
                 ? "bg-[#2f74ff]/18 text-[#b7d9ff] shadow-[inset_0_0_0_1px_rgba(83,153,255,0.35)]"
                 : "text-slate-300 hover:bg-white/8 hover:text-white",
             )}
           >
-            <Icon className={SIDEBAR_ICON_CLASS} />
+            <Icon className={clsx("shrink-0", showLabels ? SIDEBAR_ICON_CLASS : "h-7 w-7")} aria-hidden />
             <span
               className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
+                "min-w-0 transition-[opacity] duration-300",
+                showLabels
+                  ? "flex-1 overflow-hidden text-left whitespace-nowrap opacity-100"
+                  : "line-clamp-2 max-w-[5rem] text-[10px] font-medium leading-tight opacity-100",
               )}
             >
               {item.label}
@@ -140,24 +131,27 @@ function SidebarPrimaryNavFallback({
           <Link
             key={item.label}
             href={item.href}
+            title={item.label}
             onClick={() => {
               if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
                 onToggle();
               }
             }}
             className={clsx(
-              "group flex min-w-0 items-center rounded-xl text-left text-sm font-medium transition",
+              "group flex min-w-0 rounded-xl text-sm font-medium transition",
               showLabels
-                ? "w-full gap-3 px-3 py-2.5"
-                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
+                ? "w-full flex-row items-center gap-3 px-3 py-2.5 text-left"
+                : "w-full flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-center",
               "text-slate-300 hover:bg-white/8 hover:text-white",
             )}
           >
-            <Icon className={SIDEBAR_ICON_CLASS} />
+            <Icon className={clsx("shrink-0", showLabels ? SIDEBAR_ICON_CLASS : "h-7 w-7")} aria-hidden />
             <span
               className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
-                showLabels ? "flex-1 whitespace-nowrap opacity-100" : "w-0 flex-none opacity-0",
+                "min-w-0",
+                showLabels
+                  ? "flex-1 overflow-hidden text-left whitespace-nowrap"
+                  : "line-clamp-2 max-w-[5rem] text-[10px] font-medium leading-tight",
               )}
             >
               {item.label}
@@ -188,7 +182,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         isOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
         // Десктоп: в потоке, узкий или широкий режим
         "lg:sticky lg:top-0 lg:z-auto lg:translate-x-0",
-        isOpen ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[4.8rem] lg:px-2.5 lg:py-2",
+        isOpen ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.75rem] lg:px-1.5 lg:py-2",
       )}
     >
       <div className="flex h-full min-h-0 flex-col">
@@ -196,10 +190,11 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
           <button
             type="button"
             onClick={onToggle}
+            title={isOpen ? "Свернуть меню" : "Развернуть меню"}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10"
             aria-label={isOpen ? "Свернуть меню" : "Открыть меню"}
           >
-            <Menu className={SIDEBAR_ICON_CLASS} />
+            <Menu className={clsx("shrink-0", isOpen ? SIDEBAR_ICON_CLASS : "h-6 w-6")} />
           </button>
 
           {showLabels ? (
@@ -245,7 +240,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
           showLabels ? (
             <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-500/8 p-3">
               <p className="text-xs text-slate-300">
-                Войдите, чтобы видеть подписки, историю и персональные рекомендации.
+                Войдите, чтобы видеть подписки, плейлисты и персональные рекомендации.
               </p>
               <Link
                 href="/auth"
@@ -258,15 +253,14 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
           ) : (
             <Link
               href="/auth"
-              title="Войдите, чтобы видеть подписки, историю и персональные рекомендации."
+              title="Войти в аккаунт"
               aria-label="Войти для персональных рекомендаций"
               className={clsx(
-                "mt-3 flex items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 text-cyan-100 transition hover:bg-cyan-500/20",
-                "w-full py-2.5",
-                SIDEBAR_NAV_COLLAPSED_SQ,
+                "mt-3 flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-0.5 py-2.5 text-cyan-100 transition hover:bg-cyan-500/20",
               )}
             >
-              <LogIn className={SIDEBAR_ICON_CLASS} />
+              <LogIn className="h-7 w-7 shrink-0" aria-hidden />
+              <span className="max-w-[5rem] text-center text-[10px] font-medium leading-tight">Войти</span>
             </Link>
           )
         ) : null}
@@ -274,25 +268,26 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         <div className="mt-auto border-t border-white/8 pt-3">
           <Link
             href="/settings"
+            title="Настройки аккаунта"
             onClick={() => {
               if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
                 onToggle();
               }
             }}
             className={clsx(
-              "flex min-w-0 items-center rounded-xl text-slate-300 transition hover:bg-white/8 hover:text-white",
+              "flex min-w-0 rounded-xl text-slate-300 transition hover:bg-white/8 hover:text-white",
               showLabels
-                ? "w-full gap-3 px-3 py-2.5"
-                : clsx("w-full justify-center gap-0 px-0 py-2.5", SIDEBAR_NAV_COLLAPSED_SQ),
+                ? "w-full flex-row items-center gap-3 px-3 py-2.5 text-left"
+                : "w-full flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-center",
             )}
           >
-            <Settings className={SIDEBAR_ICON_CLASS} />
+            <Settings className={clsx("shrink-0", showLabels ? SIDEBAR_ICON_CLASS : "h-7 w-7")} aria-hidden />
             <span
               className={clsx(
-                "min-w-0 overflow-hidden text-left transition-[opacity,width] duration-300",
+                "min-w-0",
                 showLabels
-                  ? "flex-1 whitespace-nowrap opacity-100"
-                  : "w-0 flex-none opacity-0",
+                  ? "flex-1 overflow-hidden text-left whitespace-nowrap"
+                  : "line-clamp-2 max-w-[5rem] text-[10px] font-medium leading-tight",
               )}
             >
               Настройки

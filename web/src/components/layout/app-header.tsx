@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, Clapperboard, LogIn, LogOut, Menu, Search, Settings, Shield, Tv, X } from "lucide-react";
+import { Bell, Clapperboard, History, LogIn, LogOut, Menu, Search, Settings, Shield, Tv, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -816,6 +816,14 @@ export function AppHeader({ embedded = false }: AppHeaderProps) {
                   >
                     <Clapperboard className="h-4 w-4 text-cyan-200" />
                     Студия
+                  </Link>
+                  <Link
+                    href="/history"
+                    className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <History className="h-4 w-4 text-cyan-200" />
+                    История просмотров
                   </Link>
                   {isStaffRole(profile?.role) ? (
                     <Link
