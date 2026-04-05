@@ -72,12 +72,17 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
         "max-lg:w-[min(18rem,88vw)] max-lg:overflow-y-auto max-lg:px-3 max-lg:py-2.5",
         mobileOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
         "lg:pointer-events-auto lg:sticky lg:top-0 lg:z-auto lg:translate-x-0",
-        expanded ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.25rem] lg:px-1.5 lg:py-2",
+        expanded ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.25rem] lg:px-1 lg:py-1.5",
         "max-h-screen overflow-y-auto lg:self-start",
       )}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="mb-2 flex items-center gap-2 border-b border-white/8 pb-2.5">
+        <div
+          className={clsx(
+            "mb-2 flex border-b border-white/8 pb-2.5",
+            showLabels ? "items-center gap-2" : "items-center gap-2 lg:mb-1.5 lg:w-full lg:flex-col lg:items-stretch lg:gap-1.5 lg:pb-1.5",
+          )}
+        >
           <button
             type="button"
             onClick={() => {
@@ -85,11 +90,16 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
                 toggleExpanded();
               }
             }}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 max-lg:hidden"
+            className={clsx(
+              "grid shrink-0 place-items-center text-slate-200 transition max-lg:hidden",
+              expanded
+                ? "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10"
+                : "h-10 w-full rounded-lg border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09]",
+            )}
             title={expanded ? "Свернуть меню студии" : "Развернуть меню студии"}
             aria-label={expanded ? "Свернуть меню студии" : "Развернуть меню студии"}
           >
-            <Menu className={clsx(expanded ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS)} />
+            <Menu className={SIDEBAR_ICON_CLASS} />
           </button>
           {showLabels ? (
             <Link
@@ -98,7 +108,7 @@ export function StudioSidebar({ activeNav, onSelect, mobileOpen, onMobileClose }
               aria-label="ПОТОК — на главную"
             />
           ) : (
-            <div className="h-10 w-0 shrink-0 overflow-hidden opacity-0" aria-hidden />
+            <div className="h-10 w-0 shrink-0 overflow-hidden opacity-0 lg:hidden" aria-hidden />
           )}
           <button
             type="button"

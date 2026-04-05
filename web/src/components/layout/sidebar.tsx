@@ -182,14 +182,14 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         isOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
         // Десктоп: в потоке, узкий или широкий режим
         "lg:sticky lg:top-0 lg:z-auto lg:translate-x-0",
-        isOpen ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.75rem] lg:px-1.5 lg:py-2",
+        isOpen ? "lg:w-64 lg:px-3 lg:py-2.5" : "lg:w-[5.75rem] lg:px-1 lg:py-1.5",
       )}
     >
       <div className="flex h-full min-h-0 flex-col">
         <div
           className={clsx(
-            "mb-2 flex items-center gap-2 border-b border-white/8 pb-2.5",
-            !showLabels && "lg:justify-center lg:gap-0",
+            "mb-2 flex border-b border-white/8 pb-2.5",
+            showLabels ? "items-center gap-2" : "items-center gap-2 lg:mb-1.5 lg:w-full lg:flex-col lg:items-stretch lg:gap-1.5 lg:pb-1.5",
           )}
         >
           <button
@@ -200,7 +200,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               "grid shrink-0 place-items-center text-slate-200 transition",
               isOpen
                 ? "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10"
-                : "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10 max-lg:h-9 max-lg:w-9 max-lg:rounded-xl lg:h-8 lg:w-8 lg:rounded-lg lg:border-white/[0.07] lg:bg-white/[0.03] lg:hover:bg-white/[0.08]",
+                : "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10 max-lg:h-9 max-lg:w-9 max-lg:rounded-xl lg:h-10 lg:w-full lg:rounded-lg lg:border-white/[0.08] lg:bg-white/[0.04] lg:hover:bg-white/[0.09]",
             )}
             aria-label={isOpen ? "Свернуть меню" : "Открыть меню"}
           >
@@ -221,7 +221,7 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
               aria-label="ПОТОК — на главную"
             />
           ) : (
-            <div className="h-10 w-0 shrink-0 opacity-0" aria-hidden />
+            <div className="h-10 w-0 shrink-0 opacity-0 lg:hidden" aria-hidden />
           )}
         </div>
 

@@ -102,22 +102,37 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           expanded ? "lg:w-60 xl:w-64" : "lg:w-[5.25rem]",
         )}
       >
-        <div className="border-b border-amber-500/15 px-3 py-4 lg:px-2 lg:py-5">
-          <div className="flex items-center gap-2">
+        <div
+          className={clsx(
+            "border-b border-amber-500/15 px-3 py-4",
+            showLabels ? "lg:px-2 lg:py-5" : "lg:px-1 lg:py-2",
+          )}
+        >
+          <div
+            className={clsx(
+              "flex items-center gap-2",
+              !showLabels && "lg:w-full lg:flex-col lg:items-stretch lg:gap-1.5",
+            )}
+          >
             <button
               type="button"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 max-lg:hidden"
+              className={clsx(
+                "grid shrink-0 place-items-center text-slate-200 transition max-lg:hidden",
+                expanded
+                  ? "h-9 w-9 rounded-xl border border-white/12 bg-white/5 hover:bg-white/10"
+                  : "h-10 w-full rounded-lg border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09]",
+              )}
               title={expanded ? "Свернуть меню админки" : "Развернуть меню админки"}
               aria-label={expanded ? "Свернуть меню" : "Развернуть меню"}
               onClick={toggleExpanded}
             >
-              <Menu className={expanded ? SIDEBAR_ICON_CLASS : SIDEBAR_ICON_RAIL_CLASS} />
+              <Menu className={SIDEBAR_ICON_CLASS} />
             </button>
             <Link
               href="/"
               className={clsx(
                 "flex min-w-0 flex-1 items-center gap-2 outline-none ring-amber-500/30 focus-visible:ring-2",
-                showLabels ? "opacity-100" : "max-lg:opacity-100 lg:w-0 lg:overflow-hidden lg:opacity-0",
+                !showLabels && "lg:hidden",
               )}
             >
               <div className="h-9 min-w-[6rem] flex-1 bg-[url('/logo.svg')] bg-contain bg-left bg-no-repeat opacity-95" aria-hidden />
@@ -149,7 +164,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
 
-        <nav className="flex flex-col gap-0.5 px-2 py-3">
+        <nav
+          className={clsx(
+            "flex flex-col gap-0.5 py-3",
+            showLabels ? "px-2" : "px-2 lg:px-1",
+          )}
+        >
           {navItems.map(({ href, label, hint, Icon }) => {
             const active =
               pathname === href ||
