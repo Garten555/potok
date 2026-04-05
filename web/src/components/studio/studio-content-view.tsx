@@ -1,8 +1,10 @@
 "use client";
 
-import { type KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, SetStateAction } from "react";
 import Link from "next/link";
 import { Search, Trash2 } from "lucide-react";
+import { StudioVideoTagsField } from "@/components/studio/studio-video-tags-field";
+import { MAX_VIDEO_TAG_LEN, MAX_VIDEO_TAGS } from "@/lib/studio-video-tags";
 
 type Visibility = "public" | "unlisted" | "private";
 
@@ -61,8 +63,10 @@ export type StudioContentViewProps = {
   setEditTitle: (v: string) => void;
   editDescription: string;
   setEditDescription: (v: string) => void;
-  editTagsInput: string;
-  setEditTagsInput: (v: string) => void;
+  editVideoTags: string[];
+  setEditVideoTags: Dispatch<SetStateAction<string[]>>;
+  editVideoTagDraft: string;
+  setEditVideoTagDraft: Dispatch<SetStateAction<string>>;
   editCategoryId: string;
   setEditCategoryId: (v: string) => void;
   editVisibility: Visibility;
@@ -72,6 +76,7 @@ export type StudioContentViewProps = {
   editSaving: boolean;
   editError: string;
   editFieldErrors: EditVideoFieldErrors;
+  setEditFieldErrors: Dispatch<SetStateAction<EditVideoFieldErrors>>;
   setEditThumbnailFile: (f: File | null) => void;
   onOpenEdit: (item: StudioContentItem) => void;
   onCancelEdit: () => void;
@@ -93,8 +98,10 @@ export function StudioContentView({
   setEditTitle,
   editDescription,
   setEditDescription,
-  editTagsInput,
-  setEditTagsInput,
+  editVideoTags,
+  setEditVideoTags,
+  editVideoTagDraft,
+  setEditVideoTagDraft,
   editCategoryId,
   setEditCategoryId,
   editVisibility,
@@ -104,6 +111,7 @@ export function StudioContentView({
   editSaving,
   editError,
   editFieldErrors,
+  setEditFieldErrors,
   setEditThumbnailFile,
   onOpenEdit,
   onCancelEdit,
@@ -263,20 +271,29 @@ export function StudioContentView({
                         <span className="text-xs text-rose-300">{editFieldErrors.description}</span>
                       ) : null}
                     </label>
-                    <label className="block space-y-1">
+                    <div className="block space-y-1">
                       <span className="text-xs text-slate-400">Теги (хэштеги)</span>
-                      <input
-                        value={editTagsInput}
-                        onChange={(e) => setEditTagsInput(e.target.value)}
-                        onKeyDownCapture={stopPlayerHotkeys}
-                        className="w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
-                        placeholder="#игры обзор или через запятую"
-                        autoComplete="off"
+                      <StudioVideoTagsField
+                        inputId="studio-edit-video-tags-input"
+                        tags={editVideoTags}
+                        setTags={setEditVideoTags}
+                        draft={editVideoTagDraft}
+                        setDraft={setEditVideoTagDraft}
+                        error={editFieldErrors.tags}
+                        onClearError={() =>
+                          setEditFieldErrors((prev) => ({ ...prev, tags: undefined }))
+                        }
+                        onCommitBlocked={(reason) =>
+                          setEditFieldErrors((prev) => ({
+                            ...prev,
+                            tags:
+                              reason === "too_long"
+                                ? `Тег не длиннее ${MAX_VIDEO_TAG_LEN} символов.`
+                                : `Не больше ${MAX_VIDEO_TAGS} тегов.`,
+                          }))
+                        }
                       />
-                      {editFieldErrors.tags ? (
-                        <span className="text-xs text-rose-300">{editFieldErrors.tags}</span>
-                      ) : null}
-                    </label>
+                    </div>
                     <label className="block space-y-1">
                       <span className="text-xs text-slate-400">Категория</span>
                       <select

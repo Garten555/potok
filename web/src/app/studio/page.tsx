@@ -24,6 +24,12 @@ import {
   STUDIO_VIEW_QUERY_KEY,
   type StudioNav,
 } from "@/lib/studio-view-param";
+import {
+  MAX_VIDEO_TAGS,
+  MAX_VIDEO_TAG_LEN,
+  normalizeOneTag,
+  validateVideoTagList,
+} from "@/lib/studio-video-tags";
 import { SIDEBAR_ICON_CLASS } from "@/components/layout/sidebar-icons";
 import { StudioBrandHero } from "@/components/studio/studio-brand-hero";
 import { StudioSidebar } from "@/components/studio/studio-sidebar";
@@ -83,33 +89,16 @@ type UploadFieldErrors = {
   thumbnailFile?: string;
 };
 
-const MAX_VIDEO_TAGS = 20;
-const MAX_VIDEO_TAG_LEN = 48;
-
-/** Парсит строку вида «#игры, обзор» или «игры обзор» в нормализованный список тегов для `videos.tags`. */
-function parseVideoTagsInput(raw: string): { tags: string[]; error?: string } {
-  const trimmed = raw.trim();
-  if (!trimmed) return { tags: [] };
-  if (trimmed.length > 600) return { tags: [], error: "Строка тегов слишком длинная (макс. 600 символов)." };
-  const seen = new Set<string>();
-  const tags: string[] = [];
-  for (const token of trimmed.split(/[\s,]+/)) {
-    let t = token.trim();
-    if (!t) continue;
-    if (t.startsWith("#")) t = t.slice(1).trim();
-    if (!t) continue;
-    t = t.toLowerCase();
-    if (t.length > MAX_VIDEO_TAG_LEN) {
-      return { tags: [], error: `Тег не длиннее ${MAX_VIDEO_TAG_LEN} символов.` };
-    }
-    if (seen.has(t)) continue;
-    seen.add(t);
-    tags.push(t);
-    if (tags.length > MAX_VIDEO_TAGS) {
-      return { tags: [], error: `Не больше ${MAX_VIDEO_TAGS} тегов.` };
-    }
-  }
-  return { tags };
+/** Собирает теги из чипов + незаконченной строки в черновике перед сохранением. */
+function mergeVideoTagsForSave(tags: string[], draft: string): string[] {
+  const out = [...tags];
+  const t = normalizeOneTag(draft);
+  if (!t) return out;
+  if (t.length > MAX_VIDEO_TAG_LEN) return out;
+  if (out.includes(t)) return out;
+  if (out.length >= MAX_VIDEO_TAGS) return out;
+  out.push(t);
+  return out;
 }
 
 /** PostgREST при отсутствии колонки в кэше схемы (миграция не применена). */
@@ -208,8 +197,49 @@ function suggestCategoryId(
     },
     {
       slug: "tech",
-      keys: ["техн", "смартфон", "ноутбук", "желез", "ai", "ии", "программир", "код", "tech", "gadget", "programming", "code"],
-      categoryHints: ["техн", "tech", "гаджет"],
+      keys: [
+        "техн",
+        "смартфон",
+        "ноутбук",
+        "желез",
+        "ai",
+        "ии",
+        "программир",
+        "код",
+        "tech",
+        "gadget",
+        "programming",
+        "code",
+        "rtx",
+        "gtx",
+        "nvidia",
+        "geforce",
+        "radeon",
+        "видеокарт",
+        "gpu",
+        "процессор",
+        "cpu",
+        "ryzen",
+        "threadripper",
+        "intel",
+        "xeon",
+        "ssd",
+        "nvme",
+        "macbook",
+        "iphone",
+        "ipad",
+        "android",
+        "бенчмарк",
+        "benchmark",
+        "разгон",
+        "материнск",
+        "системн",
+        "монитор",
+        "перифер",
+        "usb-c",
+        "type-c",
+      ],
+      categoryHints: ["техн", "tech", "гаджет", "техник"],
     },
   ];
 
@@ -262,7 +292,8 @@ async function playlistVideoCountsByPlaylistId(
 function StudioInner() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
+  const [videoTags, setVideoTags] = useState<string[]>([]);
+  const [videoTagDraft, setVideoTagDraft] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [isCategoryManuallySelected, setIsCategoryManuallySelected] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -323,7 +354,8 @@ function StudioInner() {
   const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editTagsInput, setEditTagsInput] = useState("");
+  const [editVideoTags, setEditVideoTags] = useState<string[]>([]);
+  const [editVideoTagDraft, setEditVideoTagDraft] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
   const [editVisibility, setEditVisibility] = useState<Visibility>("public");
   const [editThumbnailFile, setEditThumbnailFile] = useState<File | null>(null);
@@ -974,10 +1006,23 @@ function StudioInner() {
     else if (normalizedDescription && containsProfanity(normalizedDescription)) {
       nextErrors.description = "Описание содержит недопустимую лексику.";
     }
-    const tagParse = parseVideoTagsInput(tagsInput);
-    if (tagParse.error) nextErrors.tags = tagParse.error;
-    else if (tagParse.tags.some((t) => containsProfanity(t))) {
-      nextErrors.tags = "Один из тегов содержит недопустимую лексику.";
+    const tagsMerged = mergeVideoTagsForSave(videoTags, videoTagDraft);
+    const draftNorm = normalizeOneTag(videoTagDraft);
+    if (
+      draftNorm &&
+      tagsMerged.length === videoTags.length &&
+      !videoTags.includes(draftNorm)
+    ) {
+      nextErrors.tags =
+        draftNorm.length > MAX_VIDEO_TAG_LEN
+          ? `Тег не длиннее ${MAX_VIDEO_TAG_LEN} символов.`
+          : `Не больше ${MAX_VIDEO_TAGS} тегов.`;
+    } else {
+      const tagListError = validateVideoTagList(tagsMerged);
+      if (tagListError) nextErrors.tags = tagListError;
+      else if (tagsMerged.some((t) => containsProfanity(t))) {
+        nextErrors.tags = "Один из тегов содержит недопустимую лексику.";
+      }
     }
     if (!categoryId) nextErrors.categoryId = "Выберите категорию.";
     if (!selectedVideoFile) nextErrors.videoFile = "Загрузите видеофайл.";
@@ -998,7 +1043,7 @@ function StudioInner() {
         title: title.trim(),
         description: description.trim() || null,
         category_id: categoryId,
-        tags: tagParse.tags,
+        tags: tagsMerged,
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
         visibility,
@@ -1034,7 +1079,8 @@ function StudioInner() {
       setSuccess("Видео опубликовано.");
       setTitle("");
       setDescription("");
-      setTagsInput("");
+      setVideoTags([]);
+      setVideoTagDraft("");
       setCategoryId("");
       setVisibility("public");
       setPhotosensitiveWarning(false);
@@ -1271,7 +1317,12 @@ function StudioInner() {
     setEditTitle(item.title);
     setEditDescription(item.description ?? "");
     const tags = (item.tags ?? []) as string[];
-    setEditTagsInput(tags.map((t) => (t.startsWith("#") ? t : `#${t}`)).join(" "));
+    setEditVideoTags(
+      tags
+        .map((raw) => normalizeOneTag(raw.startsWith("#") ? raw : `#${raw}`))
+        .filter((t): t is string => Boolean(t)),
+    );
+    setEditVideoTagDraft("");
     setEditCategoryId(item.category_id ?? "");
     setEditVisibility(item.visibility ?? "public");
     setEditPhotosensitiveWarning(Boolean((item as { photosensitive_warning?: boolean }).photosensitive_warning));
@@ -1282,7 +1333,8 @@ function StudioInner() {
 
   const cancelEditVideo = () => {
     setEditingVideoId(null);
-    setEditTagsInput("");
+    setEditVideoTags([]);
+    setEditVideoTagDraft("");
     setEditThumbnailFile(null);
     setEditError("");
     setEditFieldErrors({});
@@ -1303,10 +1355,23 @@ function StudioInner() {
       nextErrors.description = "Описание содержит недопустимую лексику.";
     }
     if (!editCategoryId) nextErrors.categoryId = "Выберите категорию.";
-    const editTagParse = parseVideoTagsInput(editTagsInput);
-    if (editTagParse.error) nextErrors.tags = editTagParse.error;
-    else if (editTagParse.tags.some((t) => containsProfanity(t))) {
-      nextErrors.tags = "Один из тегов содержит недопустимую лексику.";
+    const editTagsMerged = mergeVideoTagsForSave(editVideoTags, editVideoTagDraft);
+    const editDraftNorm = normalizeOneTag(editVideoTagDraft);
+    if (
+      editDraftNorm &&
+      editTagsMerged.length === editVideoTags.length &&
+      !editVideoTags.includes(editDraftNorm)
+    ) {
+      nextErrors.tags =
+        editDraftNorm.length > MAX_VIDEO_TAG_LEN
+          ? `Тег не длиннее ${MAX_VIDEO_TAG_LEN} символов.`
+          : `Не больше ${MAX_VIDEO_TAGS} тегов.`;
+    } else {
+      const editTagListErr = validateVideoTagList(editTagsMerged);
+      if (editTagListErr) nextErrors.tags = editTagListErr;
+      else if (editTagsMerged.some((t) => containsProfanity(t))) {
+        nextErrors.tags = "Один из тегов содержит недопустимую лексику.";
+      }
     }
     setEditFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -1333,7 +1398,7 @@ function StudioInner() {
         description: normalizedDescription || null,
         category_id: editCategoryId,
         visibility: editVisibility,
-        tags: editTagParse.tags,
+        tags: editTagsMerged,
         photosensitive_warning: editPhotosensitiveWarning,
       };
       if (thumbnailUrl) updatePayload.thumbnail_url = thumbnailUrl;
@@ -1505,8 +1570,10 @@ function StudioInner() {
               setTitle={setTitle}
               description={description}
               setDescription={setDescription}
-              tagsInput={tagsInput}
-              setTagsInput={setTagsInput}
+              videoTags={videoTags}
+              setVideoTags={setVideoTags}
+              videoTagDraft={videoTagDraft}
+              setVideoTagDraft={setVideoTagDraft}
               categoryId={categoryId}
               setCategoryId={setCategoryId}
               setIsCategoryManuallySelected={setIsCategoryManuallySelected}
@@ -1548,8 +1615,10 @@ function StudioInner() {
               setEditTitle={setEditTitle}
               editDescription={editDescription}
               setEditDescription={setEditDescription}
-              editTagsInput={editTagsInput}
-              setEditTagsInput={setEditTagsInput}
+              editVideoTags={editVideoTags}
+              setEditVideoTags={setEditVideoTags}
+              editVideoTagDraft={editVideoTagDraft}
+              setEditVideoTagDraft={setEditVideoTagDraft}
               editCategoryId={editCategoryId}
               setEditCategoryId={setEditCategoryId}
               editVisibility={editVisibility}
@@ -1559,6 +1628,7 @@ function StudioInner() {
               editSaving={editSaving}
               editError={editError}
               editFieldErrors={editFieldErrors}
+              setEditFieldErrors={setEditFieldErrors}
               setEditThumbnailFile={setEditThumbnailFile}
               onOpenEdit={openEditVideo}
               onCancelEdit={cancelEditVideo}

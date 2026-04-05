@@ -1,3 +1,4 @@
+-- Расширение ключевых слов для авто-категории «Техника» (rtx, gpu, железо и т.д.)
 create or replace function public.auto_assign_video_category()
 returns trigger
 language plpgsql
@@ -71,8 +72,3 @@ begin
   return new;
 end;
 $$;
-
-drop trigger if exists trg_videos_auto_assign_category on public.videos;
-create trigger trg_videos_auto_assign_category
-before insert on public.videos
-for each row execute function public.auto_assign_video_category();

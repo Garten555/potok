@@ -1,11 +1,18 @@
 "use client";
 
-import type { KeyboardEvent as ReactKeyboardEvent, Dispatch, RefObject, SetStateAction } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  Dispatch,
+  RefObject,
+  SetStateAction,
+} from "react";
 import clsx from "clsx";
 import dynamic from "next/dynamic";
 import type { SourceInfo } from "plyr";
 import { plyrRuI18n } from "@/lib/plyr-ru";
 import type { PlyrVideoHandle } from "@/components/video/plyr-video-types";
+import { StudioVideoTagsField } from "@/components/studio/studio-video-tags-field";
+import { MAX_VIDEO_TAG_LEN, MAX_VIDEO_TAGS } from "@/lib/studio-video-tags";
 
 const PlyrVideo = dynamic(
   () => import("@/components/video/plyr-video").then((m) => m.PlyrVideo),
@@ -34,9 +41,6 @@ export type StudioUploadFieldErrors = {
   videoFile?: string;
   thumbnailFile?: string;
 };
-
-const MAX_VIDEO_TAGS = 20;
-const MAX_VIDEO_TAG_LEN = 48;
 
 function getCategoryIcon(name: string): string {
   const value = name.toLowerCase();
@@ -67,8 +71,10 @@ export type StudioUploadPanelProps = {
   setTitle: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
-  tagsInput: string;
-  setTagsInput: (v: string) => void;
+  videoTags: string[];
+  setVideoTags: Dispatch<SetStateAction<string[]>>;
+  videoTagDraft: string;
+  setVideoTagDraft: Dispatch<SetStateAction<string>>;
   categoryId: string;
   setCategoryId: (v: string) => void;
   setIsCategoryManuallySelected: (v: boolean) => void;
@@ -107,8 +113,10 @@ export function StudioUploadPanel({
   setTitle,
   description,
   setDescription,
-  tagsInput,
-  setTagsInput,
+  videoTags,
+  setVideoTags,
+  videoTagDraft,
+  setVideoTagDraft,
   categoryId,
   setCategoryId,
   setIsCategoryManuallySelected,
@@ -185,21 +193,28 @@ export function StudioUploadPanel({
                   <span className="text-xs text-rose-300">{uploadFieldErrors.description}</span>
                 ) : null}
               </label>
-              <label className="block space-y-1">
+              <div className="block space-y-1">
                 <span className="text-xs text-slate-400">Теги (хэштеги)</span>
-                <input
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  onKeyDownCapture={stopPlayerHotkeys}
-                  className="w-full rounded-lg border border-white/10 bg-[#0b1120] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-400/55"
-                  placeholder="#игры обзор или через запятую"
-                  autoComplete="off"
+                <StudioVideoTagsField
+                  tags={videoTags}
+                  setTags={setVideoTags}
+                  draft={videoTagDraft}
+                  setDraft={setVideoTagDraft}
+                  error={uploadFieldErrors.tags}
+                  onClearError={() =>
+                    setUploadFieldErrors((prev) => ({ ...prev, tags: undefined }))
+                  }
+                  onCommitBlocked={(reason) =>
+                    setUploadFieldErrors((prev) => ({
+                      ...prev,
+                      tags:
+                        reason === "too_long"
+                          ? `Тег не длиннее ${MAX_VIDEO_TAG_LEN} символов.`
+                          : `Не больше ${MAX_VIDEO_TAGS} тегов.`,
+                    }))
+                  }
                 />
-                <span className="text-[11px] leading-snug text-slate-500">
-                  До {MAX_VIDEO_TAGS} тегов, до {MAX_VIDEO_TAG_LEN} символов каждый. Символ # необязателен.
-                </span>
-                {uploadFieldErrors.tags ? <span className="text-xs text-rose-300">{uploadFieldErrors.tags}</span> : null}
-              </label>
+              </div>
               <label className="block space-y-1">
                 <span className="text-xs text-slate-400">Категория</span>
                 <select
