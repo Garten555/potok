@@ -432,11 +432,7 @@ export function CommentsSection({ videoId, videoOwnerId, viewerId }: CommentsSec
               </button>
             </>
           ) : null}
-          {showReport ? (
-            <div className="scale-90">
-              <ReportDialog targetType="comment" targetId={item.id} label="Жалоба" />
-            </div>
-          ) : null}
+          {showReport ? <ReportDialog targetType="comment" targetId={item.id} label="Жалоба" /> : null}
           {canDelete && !isEditing ? (
             <button
               type="button"

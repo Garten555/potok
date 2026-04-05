@@ -22,6 +22,10 @@ export default async function Home({ searchParams }: HomeProps) {
     redirect("/history");
   }
 
+  if (tab === "subscriptions") {
+    redirect("/subscriptions");
+  }
+
   if (tab === "favorites") {
     redirect("/favorites");
   }

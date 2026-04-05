@@ -16,6 +16,7 @@ import {
   Scale,
   Shield,
   FileText,
+  ListVideo,
 } from "lucide-react";
 import { SIDEBAR_ICON_CLASS, SIDEBAR_NAV_COLLAPSED_SQ } from "@/components/layout/sidebar-icons";
 
@@ -32,8 +33,9 @@ const guestNavItems = [
 
 const authNavItems = [
   { label: "Главная", icon: Radio, href: "/" },
-  { label: "Подписки", icon: Tv, href: "/?tab=subscriptions" },
-  { label: "История", icon: Clock, href: "/?tab=history" },
+  { label: "Подписки", icon: Tv, href: "/subscriptions" },
+  { label: "История", icon: Clock, href: "/history" },
+  { label: "Плейлисты", icon: ListVideo, href: "/playlists" },
   { label: "Понравившиеся", icon: ThumbsUp, href: "/favorites" },
   { label: "Ваши видео", icon: Video, href: "/studio?tab=content" },
 ];
@@ -83,7 +85,18 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pt-1 sm:gap-2 lg:gap-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.href === "/" && pathname === "/";
+            const isActive =
+              item.href === "/subscriptions"
+                ? pathname === "/subscriptions"
+                : item.href === "/playlists"
+                  ? pathname === "/playlists"
+                  : item.href === "/favorites"
+                    ? pathname === "/favorites"
+                    : item.href === "/history"
+                      ? pathname === "/history"
+                      : item.href.startsWith("/studio")
+                        ? pathname === "/studio"
+                        : item.href === "/" && pathname === "/";
 
             return (
               <Link
