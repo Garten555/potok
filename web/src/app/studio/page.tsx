@@ -1318,9 +1318,13 @@ function StudioInner() {
     setEditDescription(item.description ?? "");
     const tags = (item.tags ?? []) as string[];
     setEditVideoTags(
-      tags
-        .map((raw) => normalizeOneTag(raw.startsWith("#") ? raw : `#${raw}`))
-        .filter((t): t is string => Boolean(t)),
+      [
+        ...new Set(
+          tags
+            .map((raw) => normalizeOneTag(raw.startsWith("#") ? raw : `#${raw}`))
+            .filter((t): t is string => Boolean(t)),
+        ),
+      ],
     );
     setEditVideoTagDraft("");
     setEditCategoryId(item.category_id ?? "");
