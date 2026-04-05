@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ListVideo, Clock } from "lucide-react";
+import { ListVideo } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthState } from "@/components/auth/auth-context";
-import clsx from "clsx";
+import { YoutubeStylePlaylistThumbnail } from "@/components/playlist/youtube-style-playlist-thumbnail";
 import { studioPathForNav } from "@/lib/studio-view-param";
 
 type PlaylistRow = {
@@ -28,15 +28,6 @@ type PvRow = {
 function playlistDisplayTitle(pl: PlaylistRow): string {
   if (pl.system_key === "watch_later") return "Смотреть позже";
   return pl.title;
-}
-
-function PlaylistStackIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z" opacity="0.35" />
-      <path d="M8 16h12v2H8v-2zm0-5h12v2H8v-2zm4-5h8v2h-8V6z" />
-    </svg>
-  );
 }
 
 export function PlaylistsPageFeed() {
@@ -140,9 +131,7 @@ export function PlaylistsPageFeed() {
           <ListVideo className="h-4 w-4 text-cyan-200" />
           Плейлисты
         </h2>
-        <p className="mt-1 text-sm text-slate-400">
-          «Смотреть позже» и плейлисты, которые вы создали в студии
-        </p>
+        <p className="mt-1 text-sm text-slate-400">Все ваши плейлисты, включая «Смотреть позже»</p>
       </div>
 
       {!isAuthenticated ? (
@@ -170,55 +159,40 @@ export function PlaylistsPageFeed() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {rows.map(({ pl, count, thumb, firstVideoId }) => {
               const title = playlistDisplayTitle(pl);
-              const isWatchLater = pl.system_key === "watch_later";
               const href =
                 firstVideoId != null
                   ? `/watch/${firstVideoId}?list=${encodeURIComponent(pl.id)}`
                   : studioPathForNav("playlists");
+              const visibilityLabel =
+                pl.visibility === "private"
+                  ? "Приватный"
+                  : pl.visibility === "unlisted"
+                    ? "Доступ по ссылке"
+                    : null;
+              const metaLine =
+                count === 0
+                  ? ["Нет видео", visibilityLabel, "Добавьте ролики в студии"].filter(Boolean).join(" · ")
+                  : (visibilityLabel ?? "");
 
               return (
                 <Link
                   key={pl.id}
                   href={href}
-                  className={clsx(
-                    "group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition",
-                    "hover:border-cyan-300/35 hover:bg-white/[0.06]",
-                  )}
+                  className="group block rounded-xl p-1.5 transition hover:bg-white/[0.04]"
+                  aria-label={`Плейлист: ${title}`}
                 >
-                  <div className="flex gap-0">
-                    <div
-                      className={clsx(
-                        "relative aspect-video w-[58%] shrink-0 bg-cover bg-center sm:w-[56%]",
-                        !thumb && "bg-[#0b1323]",
-                      )}
-                      style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}
-                    />
-                    <div
-                      className={clsx(
-                        "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-3",
-                        isWatchLater ? "bg-amber-950/40" : "bg-[#0d1424]",
-                      )}
-                    >
-                      {isWatchLater ? (
-                        <Clock className="h-8 w-8 text-amber-200/90" />
-                      ) : (
-                        <PlaylistStackIcon className="h-8 w-8 text-slate-200/90" />
-                      )}
-                      <span className="text-xs font-semibold text-slate-200">{count}</span>
-                    </div>
-                  </div>
-                  <div className="border-t border-white/10 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      {isWatchLater ? "Системный" : "Плейлист"}
-                    </p>
-                    <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold text-slate-100 group-hover:text-cyan-200">
+                  <YoutubeStylePlaylistThumbnail
+                    thumbnailUrl={thumb}
+                    videosCount={count}
+                    title={title}
+                  />
+                  <div className="mt-2.5 min-w-0 px-0.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Плейлист</p>
+                    <p className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-slate-100 transition group-hover:text-cyan-200 sm:text-[15px]">
                       {title}
-                    </h3>
-                    {pl.visibility === "private" && !isWatchLater ? (
-                      <p className="mt-1 text-xs text-slate-500">Приватный</p>
-                    ) : null}
-                    {count === 0 ? (
-                      <p className="mt-1 text-xs text-slate-500">Пусто — откроется студия</p>
+                    </p>
+                    {metaLine ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-400">{metaLine}</p>
                     ) : null}
                   </div>
                 </Link>
