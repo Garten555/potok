@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaff } from "@/lib/server/staff-auth";
 import type {
+  ModerationCommentContext,
   ModerationReportRow,
   ModerationReportsListErrorBody,
   ModerationReportsListResponse,
@@ -9,6 +10,14 @@ import { parseAdminUserSearchQuery } from "@/lib/admin-user-search";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 type ReportRecord = Record<string, unknown>;
+
+const PARENT_SNIPPET_LEN = 160;
+
+function snippet(text: string, max = PARENT_SNIPPET_LEN): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
 
 function jsonError(message: string, status: number) {
   const body: ModerationReportsListErrorBody = { error: message };
@@ -141,14 +150,44 @@ export async function GET(req: Request) {
     }
   }
 
+  const commentTargetIds = [
+    ...new Set(
+      list
+        .filter((r) => String((r as { target_type?: string }).target_type) === "comment")
+        .map((r) => String((r as { target_id?: string }).target_id)),
+    ),
+  ];
+
+  let commentTextById = new Map<string, string>();
+  if (commentTargetIds.length > 0) {
+    const { data: commentRows } = await svc
+      .from("comments")
+      .select("id, content")
+      .in("id", commentTargetIds);
+    for (const row of commentRows ?? []) {
+      const id = String((row as { id: string }).id);
+      const content = String((row as { content?: string }).content ?? "");
+      commentTextById.set(id, content);
+    }
+  }
+
   if (q) {
     list = list.filter((r) => {
       const reasonCode = String((r as { reason_code?: string }).reason_code ?? "").toLowerCase();
       const details = String((r as { details?: string }).details ?? "").toLowerCase();
       const note = String((r as { resolution_note?: string }).resolution_note ?? "").toLowerCase();
       const tid = String((r as { target_id?: string }).target_id ?? "").toLowerCase();
+      const ttype = String((r as { target_type?: string }).target_type);
+      const commentBody =
+        ttype === "comment"
+          ? (commentTextById.get(String((r as { target_id?: string }).target_id)) ?? "").toLowerCase()
+          : "";
       return (
-        reasonCode.includes(q) || details.includes(q) || note.includes(q) || tid.includes(q)
+        reasonCode.includes(q) ||
+        details.includes(q) ||
+        note.includes(q) ||
+        tid.includes(q) ||
+        commentBody.includes(q)
       );
     });
   }
@@ -157,8 +196,97 @@ export async function GET(req: Request) {
   const start = (page - 1) * limit;
   const paginated = list.slice(start, start + limit);
 
+  const pageCommentIds = [
+    ...new Set(
+      paginated
+        .filter((r) => String((r as { target_type?: string }).target_type) === "comment")
+        .map((r) => String((r as { target_id?: string }).target_id)),
+    ),
+  ];
+
+  let enrichedReports: ModerationReportRow[] = paginated as ModerationReportRow[];
+
+  if (pageCommentIds.length > 0) {
+    const { data: cRows } = await svc
+      .from("comments")
+      .select("id, content, video_id, user_id, parent_id")
+      .in("id", pageCommentIds);
+
+    const byComment = new Map<string, { content: string; video_id: string; user_id: string; parent_id: string | null }>();
+    const parentIds = new Set<string>();
+    for (const row of cRows ?? []) {
+      const o = row as {
+        id: string;
+        content: string;
+        video_id: string;
+        user_id: string;
+        parent_id: string | null;
+      };
+      byComment.set(o.id, {
+        content: o.content,
+        video_id: o.video_id,
+        user_id: o.user_id,
+        parent_id: o.parent_id,
+      });
+      if (o.parent_id) parentIds.add(o.parent_id);
+    }
+
+    const videoIds = [...new Set([...byComment.values()].map((c) => c.video_id))];
+    const authorIds = [...new Set([...byComment.values()].map((c) => c.user_id))];
+
+    const [{ data: videos }, { data: users }, { data: parents }] = await Promise.all([
+      videoIds.length
+        ? svc.from("videos").select("id, title").in("id", videoIds)
+        : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+      authorIds.length
+        ? svc.from("users").select("id, channel_handle, channel_name").in("id", authorIds)
+        : Promise.resolve({ data: [] as { id: string; channel_handle: string | null; channel_name: string }[] }),
+      parentIds.size
+        ? svc.from("comments").select("id, content").in("id", [...parentIds])
+        : Promise.resolve({ data: [] as { id: string; content: string }[] }),
+    ]);
+
+    const titleByVideo = new Map((videos ?? []).map((v) => [String((v as { id: string }).id), String((v as { title?: string }).title ?? "")]));
+    const authorDisplayByUser = new Map<string, string | null>(
+      (users ?? []).map((u) => {
+        const row = u as { id: string; channel_handle: string | null; channel_name: string };
+        const h = row.channel_handle?.trim();
+        const name = row.channel_name?.trim();
+        const display = h && h.length > 0 ? `@${h}` : name && name.length > 0 ? name : null;
+        return [String(row.id), display];
+      }),
+    );
+    const parentSnippet = new Map(
+      (parents ?? []).map((p) => {
+        const row = p as { id: string; content: string };
+        return [String(row.id), snippet(row.content)] as [string, string];
+      }),
+    );
+
+    enrichedReports = paginated.map((r) => {
+      const row = r as ReportRecord & { target_type?: string; target_id?: string };
+      if (row.target_type !== "comment") {
+        return r as ModerationReportRow;
+      }
+      const cid = String(row.target_id ?? "");
+      const c = byComment.get(cid);
+      if (!c) {
+        return { ...(r as ModerationReportRow), moderation_context: null };
+      }
+      const titleRaw = titleByVideo.get(c.video_id) ?? "";
+      const ctx: ModerationCommentContext = {
+        comment_content: c.content,
+        video_id: c.video_id,
+        video_title: titleRaw.trim() ? titleRaw : null,
+        comment_author_display: authorDisplayByUser.get(c.user_id) ?? null,
+        parent_comment_snippet: c.parent_id ? parentSnippet.get(c.parent_id) ?? null : null,
+      };
+      return { ...(r as ModerationReportRow), moderation_context: ctx };
+    });
+  }
+
   const body: ModerationReportsListResponse = {
-    reports: paginated as ModerationReportRow[],
+    reports: enrichedReports,
     total,
     page,
     pageSize: limit,

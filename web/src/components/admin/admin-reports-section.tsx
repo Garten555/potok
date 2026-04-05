@@ -296,16 +296,64 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
               className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-200"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0 flex-1">
                   <span className="text-xs text-slate-500">{new Date(r.created_at).toLocaleString("ru-RU")}</span>
                   <p className="mt-1 font-medium text-slate-100">
-                    <span className="text-slate-400">{targetLabel(r.target_type)}</span> ·{" "}
-                    <span className="font-mono text-cyan-200/90">{r.target_id}</span>
+                    <span className="text-slate-400">{targetLabel(r.target_type)}</span>
+                    {r.target_type === "comment" ? (
+                      <>
+                        {" "}
+                        {r.moderation_context?.video_title ? (
+                          <span className="font-normal text-slate-300">
+                            · под видео «{r.moderation_context.video_title}»
+                          </span>
+                        ) : (
+                          <span className="font-mono text-xs font-normal text-cyan-200/85">
+                            · id {r.target_id}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {" "}
+                        <span className="font-mono text-sm text-cyan-200/90">{r.target_id}</span>
+                      </>
+                    )}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  {r.target_type === "comment" ? (
+                    <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3">
+                      {r.moderation_context?.parent_comment_snippet ? (
+                        <p className="mb-2 border-l-2 border-amber-500/40 pl-2.5 text-xs leading-snug text-slate-400">
+                          <span className="font-semibold text-amber-200/80">Ответ на:</span>{" "}
+                          {r.moderation_context.parent_comment_snippet}
+                        </p>
+                      ) : null}
+                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">
+                        {r.moderation_context?.comment_content ??
+                          "Текст не найден — комментарий мог быть удалён."}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                        {r.moderation_context?.comment_author_display ? (
+                          <span>
+                            Автор:{" "}
+                            <span className="text-slate-400">{r.moderation_context.comment_author_display}</span>
+                          </span>
+                        ) : (
+                          <span>Автор: —</span>
+                        )}
+                        <span className="font-mono text-[10px] opacity-70">comment_id {r.target_id}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                  <p className="mt-2 text-xs text-slate-400">
                     Причина: {reportReasonLabel(r.reason_code)} ({reportStatusLabelRu(r.status)})
                   </p>
-                  {r.details ? <p className="mt-2 text-slate-300">{r.details}</p> : null}
+                  {r.details ? (
+                    <p className="mt-2 rounded-lg border border-white/5 bg-white/[0.02] px-2 py-1.5 text-slate-300">
+                      <span className="text-xs font-medium text-slate-500">Текст жалобы: </span>
+                      {r.details}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {r.target_type === "video" ? (
@@ -316,6 +364,16 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
                       className="rounded-lg border border-sky-400/35 bg-sky-500/15 px-2 py-1 text-xs font-medium text-sky-100 transition hover:bg-sky-500/25"
                     >
                       Смотреть видео
+                    </Link>
+                  ) : null}
+                  {r.target_type === "comment" && r.moderation_context?.video_id ? (
+                    <Link
+                      href={`/watch/${encodeURIComponent(r.moderation_context.video_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-sky-400/35 bg-sky-500/15 px-2 py-1 text-xs font-medium text-sky-100 transition hover:bg-sky-500/25"
+                    >
+                      Страница видео
                     </Link>
                   ) : null}
                   <button
