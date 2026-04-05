@@ -29,14 +29,6 @@ type HeaderProfile = {
   role?: string | null;
 };
 
-type NotificationRow = {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
-  is_read: boolean;
-  created_at: string;
-};
-
 const HEADER_PROFILE_CACHE_KEY = "potok.headerProfile.v1";
 
 function readHeaderProfileCache(userId: string): HeaderProfile | null {
@@ -67,6 +59,14 @@ function clearHeaderProfileCache() {
     /* ignore */
   }
 }
+
+type NotificationRow = {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
+};
 
 type UserPublicRow = {
   id: string;
