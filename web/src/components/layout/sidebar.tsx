@@ -276,33 +276,35 @@ export function Sidebar({ isOpen, onToggle, isAuthenticated }: SidebarProps) {
         ) : null}
 
         <div className="mt-auto border-t border-white/8 pt-3">
-          <Link
-            href="/settings"
-            title="Настройки аккаунта"
-            onClick={() => {
-              if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
-                onToggle();
-              }
-            }}
-            className={clsx(
-              "flex min-w-0 rounded-xl text-slate-300 transition hover:bg-white/8 hover:text-white",
-              showLabels
-                ? "w-full flex-row items-center gap-3 px-3 py-2.5 text-left"
-                : "w-full flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-center",
-            )}
-          >
-            <Settings className={clsx("shrink-0", showLabels ? SIDEBAR_ICON_CLASS : "h-7 w-7")} aria-hidden />
-            <span
+          {isAuthenticated ? (
+            <Link
+              href="/settings"
+              title="Настройки аккаунта"
+              onClick={() => {
+                if (window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+                  onToggle();
+                }
+              }}
               className={clsx(
-                "min-w-0",
+                "flex min-w-0 rounded-xl text-slate-300 transition hover:bg-white/8 hover:text-white",
                 showLabels
-                  ? "flex-1 overflow-hidden text-left whitespace-nowrap"
-                  : "line-clamp-2 max-w-[5rem] text-[10px] font-medium leading-tight",
+                  ? "w-full flex-row items-center gap-3 px-3 py-2.5 text-left"
+                  : "w-full flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-center",
               )}
             >
-              Настройки
-            </span>
-          </Link>
+              <Settings className={clsx("shrink-0", showLabels ? SIDEBAR_ICON_CLASS : "h-7 w-7")} aria-hidden />
+              <span
+                className={clsx(
+                  "min-w-0",
+                  showLabels
+                    ? "flex-1 overflow-hidden text-left whitespace-nowrap"
+                    : "line-clamp-2 max-w-[5rem] text-[10px] font-medium leading-tight",
+                )}
+              >
+                Настройки
+              </span>
+            </Link>
+          ) : null}
 
           {showLabels ? (
             <nav

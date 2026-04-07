@@ -92,6 +92,9 @@ export type StudioUploadPanelProps = {
   setThumbnailFile: (f: File | null) => void;
   thumbCandidatesError: string;
   replaceThumbnailPreviewFromFile: (f: File | null) => void;
+  /** Загруженный файл картинки — первый слот в сетке и превью справа */
+  isCustomThumbnail: boolean;
+  activeThumbnailPreviewUrl: string | undefined;
   error: string;
   success: string;
   source: SourceInfo | null;
@@ -134,6 +137,8 @@ export function StudioUploadPanel({
   setThumbnailFile,
   thumbCandidatesError,
   replaceThumbnailPreviewFromFile,
+  isCustomThumbnail,
+  activeThumbnailPreviewUrl,
   error,
   success,
   source,
@@ -286,37 +291,102 @@ export function StudioUploadPanel({
                         {isCapturingThumbs ? "..." : thumbCandidates.length ? `${thumbCandidates.length} шт` : "—"}
                       </span>
                     </div>
+                    <p className="text-[11px] leading-snug text-slate-500">
+                      Сначала показывается{" "}
+                      <span className="text-slate-400">ваша загруженная картинка</span> (если вы нажали «Выбрать файл»
+                      ниже). Рядом — <span className="text-slate-400">кадры из видео</span> (обычно до пяти): нажмите
+                      кадр, чтобы сделать его превью. Плашка «Своя обложка» — это именно ваш файл, не кадр из ролика.
+                    </p>
 
                     {isCapturingThumbs ? (
                       <p className="text-xs text-slate-400">Автовыбор кадров...</p>
                     ) : thumbCandidates.length > 0 ? (
                       <div className="grid grid-cols-2 gap-2">
-                        {thumbCandidates.map((c) => {
-                          const selected = selectedThumbCandidateId === c.id;
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => onSelectThumbCandidate(c)}
-                              className={clsx(
-                                "relative overflow-hidden rounded-lg border transition",
-                                selected
-                                  ? "border-cyan-300/35 bg-cyan-500/10"
-                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
-                              )}
+                        {isCustomThumbnail && activeThumbnailPreviewUrl ? (
+                          <>
+                            <div
+                              className="relative overflow-hidden rounded-lg border border-cyan-300/35 bg-cyan-500/10"
+                              role="img"
+                              aria-label="Своя обложка"
                             >
-                              <img src={c.previewUrl} alt="Кадр для обложки" className="aspect-video w-full object-cover" />
-                              <div className="absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-cyan-100">
-                                {c.timeSec.toFixed(1)}с
+                              <img
+                                src={activeThumbnailPreviewUrl}
+                                alt=""
+                                className="aspect-video w-full object-cover"
+                              />
+                              <div className="absolute left-2 top-2 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-cyan-100">
+                                Своя обложка
                               </div>
-                              {selected ? (
-                                <div className="absolute right-2 top-2 rounded bg-cyan-500/30 px-2 py-1 text-[10px] font-medium text-cyan-100">
-                                  Выбрано
+                              <div className="absolute right-2 top-2 rounded bg-cyan-500/30 px-2 py-1 text-[10px] font-medium text-cyan-100">
+                                Выбрано
+                              </div>
+                            </div>
+                            {thumbCandidates.slice(1).map((c) => {
+                              const selected = selectedThumbCandidateId === c.id;
+                              return (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => onSelectThumbCandidate(c)}
+                                  className={clsx(
+                                    "relative overflow-hidden rounded-lg border transition",
+                                    selected
+                                      ? "border-cyan-300/35 bg-cyan-500/10"
+                                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
+                                  )}
+                                >
+                                  <img src={c.previewUrl} alt="Кадр для обложки" className="aspect-video w-full object-cover" />
+                                  <div className="absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-cyan-100">
+                                    {c.timeSec.toFixed(1)}с
+                                  </div>
+                                  {selected ? (
+                                    <div className="absolute right-2 top-2 rounded bg-cyan-500/30 px-2 py-1 text-[10px] font-medium text-cyan-100">
+                                      Выбрано
+                                    </div>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          thumbCandidates.map((c) => {
+                            const selected = selectedThumbCandidateId === c.id;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => onSelectThumbCandidate(c)}
+                                className={clsx(
+                                  "relative overflow-hidden rounded-lg border transition",
+                                  selected
+                                    ? "border-cyan-300/35 bg-cyan-500/10"
+                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
+                                )}
+                              >
+                                <img src={c.previewUrl} alt="Кадр для обложки" className="aspect-video w-full object-cover" />
+                                <div className="absolute left-2 top-2 rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-cyan-100">
+                                  {c.timeSec.toFixed(1)}с
                                 </div>
-                              ) : null}
-                            </button>
-                          );
-                        })}
+                                {selected ? (
+                                  <div className="absolute right-2 top-2 rounded bg-cyan-500/30 px-2 py-1 text-[10px] font-medium text-cyan-100">
+                                    Выбрано
+                                  </div>
+                                ) : null}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    ) : isCustomThumbnail && activeThumbnailPreviewUrl ? (
+                      <div className="overflow-hidden rounded-lg border border-cyan-300/35 bg-cyan-500/10">
+                        <img
+                          src={activeThumbnailPreviewUrl}
+                          alt=""
+                          className="aspect-video w-full max-w-sm object-cover"
+                        />
+                        <p className="border-t border-white/10 px-2 py-1.5 text-[10px] text-cyan-100/90">
+                          Своя обложка — кадры из видео появятся ниже после обработки
+                        </p>
                       </div>
                     ) : null}
 
@@ -325,8 +395,17 @@ export function StudioUploadPanel({
 
                   <div className="space-y-2 rounded-lg border border-white/10 bg-[#0b1120]/40 p-3">
                     <span className="text-xs text-slate-400">Загрузить свою обложку</span>
+                    {isCustomThumbnail && activeThumbnailPreviewUrl ? (
+                      <div className="overflow-hidden rounded-lg border border-white/10 bg-black/30">
+                        <img
+                          src={activeThumbnailPreviewUrl}
+                          alt="Превью своей обложки"
+                          className="aspect-video w-full object-cover"
+                        />
+                      </div>
+                    ) : null}
                     <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-lg border border-cyan-300/35 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/30">
-                      Выбрать файл
+                      {isCustomThumbnail ? "Заменить файл" : "Выбрать файл"}
                       <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"

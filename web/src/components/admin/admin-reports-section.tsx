@@ -12,6 +12,7 @@ import type {
 } from "@/lib/moderation-reports-types";
 import clsx from "clsx";
 import { isAdminRole } from "@/lib/user-role";
+import { dispatchHomeFeedRefresh } from "@/lib/home-feed-refresh";
 
 export type ReportRow = ModerationReportRow;
 
@@ -160,7 +161,10 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
 
   const hideVideo = async (videoId: string) => {
     const { error } = await supabase.from("videos").update({ visibility: "private" }).eq("id", videoId);
-    if (!error) await loadReports();
+    if (!error) {
+      await loadReports();
+      dispatchHomeFeedRefresh();
+    }
   };
 
   const filteredReasons = useMemo(() => REPORT_REASON_CODES, []);

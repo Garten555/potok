@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomeCategoryId } from "@/components/home/categories";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PlayCircle } from "lucide-react";
 import { VideoGridCard } from "@/components/video/video-grid-card";
 import { scoreVideoForHome, type RecContext } from "@/lib/recommendations";
 import { isChannelHiddenFromPublic } from "@/lib/moderation-visibility";
+import { HOME_FEED_REFRESH_EVENT } from "@/lib/home-feed-refresh";
 
 /**
  * Главная: как на YouTube — полоса категорий (слайдер чипов) + один большой блок рекомендаций.
@@ -43,6 +44,31 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
   const [now, setNow] = useState(() => Date.now());
   /** Пока первая загрузка списка не завершена — скелетон, а не «нет видео». */
   const [feedReady, setFeedReady] = useState(false);
+  /** Увеличивается при событии обновления или возврате на вкладку — повторная загрузка с сервера. */
+  const [feedGeneration, setFeedGeneration] = useState(0);
+  const visibilityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleRefreshFromVisibility = useCallback(() => {
+    if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
+    visibilityDebounceRef.current = setTimeout(() => {
+      visibilityDebounceRef.current = null;
+      setFeedGeneration((g) => g + 1);
+    }, 400);
+  }, []);
+
+  useEffect(() => {
+    const onCustom = () => setFeedGeneration((g) => g + 1);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleRefreshFromVisibility();
+    };
+    window.addEventListener(HOME_FEED_REFRESH_EVENT, onCustom);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener(HOME_FEED_REFRESH_EVENT, onCustom);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (visibilityDebounceRef.current) clearTimeout(visibilityDebounceRef.current);
+    };
+  }, [scheduleRefreshFromVisibility]);
 
   useEffect(() => {
     let cancelled = false;
@@ -200,7 +226,7 @@ export function HomeVideoFeed({ activeCategory }: HomeVideoFeedProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [feedGeneration]);
 
   // Чтобы соблюсти чистоту рендера (eslint react-hooks/purity), обновляем время через state.
   useEffect(() => {
