@@ -7,10 +7,19 @@ export type ModerationCommentContext = {
   comment_content: string;
   video_id: string;
   video_title: string | null;
+  /** UUID автора комментария — для бана без ручного ввода @handle */
+  comment_author_user_id: string;
   /** Для карточки в админке: @handle или название канала */
   comment_author_display: string | null;
   /** Короткий фрагмент родительского комментария, если это ответ */
   parent_comment_snippet: string | null;
+};
+
+/** Кого предлагается заблокировать по контексту жалобы (сервер). */
+export type ModerationBanTargetSuggestion = {
+  user_id: string;
+  /** Подпись для интерфейса, например @handle или имя канала */
+  label: string;
 };
 
 /** Строка жалобы (public.reports), как приходит с API. */
@@ -27,6 +36,8 @@ export type ModerationReportRow = {
   moderator_action: string | null;
   /** Заполняется для target_type === "comment" */
   moderation_context?: ModerationCommentContext | null;
+  /** Кого банить по смыслу жалобы (владелец видео, автор комментария, владелец канала) */
+  ban_target_suggestion?: ModerationBanTargetSuggestion | null;
 };
 
 /** Успешный JSON от GET /api/moderation/reports */

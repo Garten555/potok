@@ -34,6 +34,13 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
   const [total, setTotal] = useState(0);
   const pageSize = 20;
 
+  const [banDialogReport, setBanDialogReport] = useState<ModerationReportRow | null>(null);
+  const [banUntilIso, setBanUntilIso] = useState("2099-12-31T23:59:59.000Z");
+  const [banUseManualUser, setBanUseManualUser] = useState(false);
+  const [banManualUserInput, setBanManualUserInput] = useState("");
+  const [banSubmitError, setBanSubmitError] = useState<string | null>(null);
+  const [banSubmitting, setBanSubmitting] = useState(false);
+
   const loadReports = useCallback(
     async (channelOverride?: string, pageArg?: number) => {
     setLoading(true);
@@ -92,28 +99,57 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
     }
   };
 
-  const banFromReport = async (r: ModerationReportRow) => {
-    const uid = window.prompt(
-      "@handle пользователя для блокировки (как в адресе канала, с символом @ или без)",
-    );
-    if (!uid) return;
-    const until = window.prompt("Дата окончания бана ISO, напр. 2099-12-31T00:00:00.000Z");
-    if (!until) return;
-    const res = await fetch(`/api/moderation/reports/${r.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: "resolved",
-        resolution_note: note || "Бан по жалобе",
-        moderator_action: "ban_user",
-        ban_user_id: uid,
-        ban_reason_code: r.reason_code,
-        banned_until: until,
-      }),
-    });
-    if (res.ok) {
+  const openBanDialog = (r: ModerationReportRow) => {
+    setBanSubmitError(null);
+    setBanUntilIso("2099-12-31T23:59:59.000Z");
+    setBanUseManualUser(!r.ban_target_suggestion);
+    setBanManualUserInput("");
+    setBanDialogReport(r);
+  };
+
+  const closeBanDialog = () => {
+    if (banSubmitting) return;
+    setBanDialogReport(null);
+    setBanSubmitError(null);
+  };
+
+  const submitBanFromDialog = async () => {
+    const r = banDialogReport;
+    if (!r) return;
+    const suggested = r.ban_target_suggestion;
+    const rawId =
+      suggested && !banUseManualUser ? suggested.user_id : banManualUserInput.trim();
+    if (!rawId) {
+      setBanSubmitError("Укажите пользователя (@handle канала или UUID).");
+      return;
+    }
+    setBanSubmitting(true);
+    setBanSubmitError(null);
+    try {
+      const res = await fetch(`/api/moderation/reports/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "resolved",
+          resolution_note: note || "Бан по жалобе",
+          moderator_action: "ban_user",
+          ban_user_id: rawId,
+          ban_reason_code: r.reason_code,
+          banned_until: banUntilIso.trim(),
+        }),
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setBanSubmitError(j.error ?? `Ошибка ${res.status}`);
+        return;
+      }
       setNote("");
+      setBanDialogReport(null);
       await loadReports();
+    } catch {
+      setBanSubmitError("Сеть недоступна");
+    } finally {
+      setBanSubmitting(false);
     }
   };
 
@@ -397,7 +433,7 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
                     <button
                       type="button"
                       className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-2 py-1 text-xs text-rose-100"
-                      onClick={() => void banFromReport(r)}
+                      onClick={() => openBanDialog(r)}
                     >
                       Бан по жалобе
                     </button>
@@ -458,6 +494,116 @@ export function AdminReportsSection({ viewerRole }: AdminReportsSectionProps) {
         ) : null}
         </>
       )}
+
+      {banDialogReport ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ban-dialog-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeBanDialog();
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0b1120] p-5 shadow-2xl shadow-black/50">
+            <h2 id="ban-dialog-title" className="text-lg font-semibold text-slate-100">
+              Блокировка по жалобе
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Жалоба #{banDialogReport.id.slice(0, 8)}… ·{" "}
+              {targetLabel(banDialogReport.target_type)}
+            </p>
+
+            {banDialogReport.ban_target_suggestion && !banUseManualUser ? (
+              <div className="mt-4 rounded-xl border border-rose-400/25 bg-rose-500/[0.07] p-3 text-sm">
+                <p className="text-slate-300">
+                  Будет заблокирован пользователь:{" "}
+                  <strong className="text-slate-100">
+                    {banDialogReport.ban_target_suggestion.label}
+                  </strong>
+                </p>
+                <p className="mt-1 font-mono text-[11px] text-slate-500">
+                  id {banDialogReport.ban_target_suggestion.user_id}
+                </p>
+                <button
+                  type="button"
+                  className="mt-3 text-xs text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200"
+                  onClick={() => {
+                    setBanUseManualUser(true);
+                    setBanSubmitError(null);
+                  }}
+                >
+                  Указать другого пользователя (@handle или UUID)
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <label className="text-xs font-medium text-slate-500">
+                  Пользователь для блокировки (@handle канала или UUID)
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#070b14] px-3 py-2 text-sm text-slate-100"
+                  value={banManualUserInput}
+                  onChange={(e) => setBanManualUserInput(e.target.value)}
+                  placeholder="@nickname или uuid"
+                  autoComplete="off"
+                />
+                {banDialogReport.ban_target_suggestion ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200"
+                    onClick={() => {
+                      setBanUseManualUser(false);
+                      setBanManualUserInput("");
+                      setBanSubmitError(null);
+                    }}
+                  >
+                    Вернуться к предложенному: {banDialogReport.ban_target_suggestion.label}
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <label className="text-xs font-medium text-slate-500">
+                Дата и время окончания бана (ISO 8601, UTC)
+              </label>
+              <input
+                className="mt-1 w-full rounded-lg border border-white/10 bg-[#070b14] px-3 py-2 font-mono text-sm text-slate-100"
+                value={banUntilIso}
+                onChange={(e) => setBanUntilIso(e.target.value)}
+                placeholder="2099-12-31T23:59:59.000Z"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Пример: <code className="text-slate-400">2099-12-31T23:59:59.000Z</code> — фактически «навсегда».
+              </p>
+            </div>
+
+            {banSubmitError ? (
+              <p className="mt-3 text-sm text-rose-300/90">{banSubmitError}</p>
+            ) : null}
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+                onClick={() => closeBanDialog()}
+                disabled={banSubmitting}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-rose-400/40 bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-100 hover:bg-rose-500/30 disabled:opacity-50"
+                onClick={() => void submitBanFromDialog()}
+                disabled={banSubmitting}
+              >
+                {banSubmitting ? "Отправка…" : "Заблокировать и закрыть жалобу"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

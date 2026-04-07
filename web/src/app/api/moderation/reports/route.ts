@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaff } from "@/lib/server/staff-auth";
 import type {
+  ModerationBanTargetSuggestion,
   ModerationCommentContext,
   ModerationReportRow,
   ModerationReportsListErrorBody,
@@ -17,6 +18,91 @@ function snippet(text: string, max = PARENT_SNIPPET_LEN): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
+}
+
+function userLabelFromRow(row: { id: string; channel_handle: string | null; channel_name: string }): string {
+  const h = row.channel_handle?.trim();
+  const name = row.channel_name?.trim();
+  if (h && h.length > 0) return `@${h}`;
+  if (name && name.length > 0) return name;
+  return row.id.slice(0, 8) + "…";
+}
+
+async function attachBanTargetSuggestions(
+  svc: ReturnType<typeof createSupabaseServiceClient>,
+  reports: ModerationReportRow[],
+): Promise<ModerationReportRow[]> {
+  const videoIds = [
+    ...new Set(
+      reports.filter((r) => r.target_type === "video").map((r) => String(r.target_id)),
+    ),
+  ];
+  const channelUserIds = [
+    ...new Set(
+      reports.filter((r) => r.target_type === "channel").map((r) => String(r.target_id)),
+    ),
+  ];
+
+  const videoOwnerByVideoId = new Map<string, string>();
+  if (videoIds.length > 0) {
+    const { data: vrows } = await svc.from("videos").select("id, user_id").in("id", videoIds);
+    for (const v of vrows ?? []) {
+      const row = v as { id: string; user_id: string };
+      videoOwnerByVideoId.set(String(row.id), String(row.user_id));
+    }
+  }
+
+  const userIds = new Set<string>();
+  for (const r of reports) {
+    if (r.target_type === "comment" && r.moderation_context?.comment_author_user_id) {
+      userIds.add(r.moderation_context.comment_author_user_id);
+    }
+    if (r.target_type === "video") {
+      const uid = videoOwnerByVideoId.get(String(r.target_id));
+      if (uid) userIds.add(uid);
+    }
+    if (r.target_type === "channel") {
+      userIds.add(String(r.target_id));
+    }
+  }
+
+  const labelByUserId = new Map<string, string>();
+  if (userIds.size > 0) {
+    const { data: urows } = await svc
+      .from("users")
+      .select("id, channel_handle, channel_name")
+      .in("id", [...userIds]);
+    for (const u of urows ?? []) {
+      const row = u as { id: string; channel_handle: string | null; channel_name: string };
+      labelByUserId.set(String(row.id), userLabelFromRow(row));
+    }
+  }
+
+  return reports.map((r): ModerationReportRow => {
+    let suggestion: ModerationBanTargetSuggestion | null = null;
+
+    if (r.target_type === "comment" && r.moderation_context?.comment_author_user_id) {
+      const uid = r.moderation_context.comment_author_user_id;
+      const label = labelByUserId.get(uid) ?? r.moderation_context.comment_author_display ?? uid;
+      suggestion = { user_id: uid, label };
+    } else if (r.target_type === "video") {
+      const ownerId = videoOwnerByVideoId.get(String(r.target_id));
+      if (ownerId) {
+        suggestion = {
+          user_id: ownerId,
+          label: labelByUserId.get(ownerId) ?? ownerId,
+        };
+      }
+    } else if (r.target_type === "channel") {
+      const uid = String(r.target_id);
+      suggestion = {
+        user_id: uid,
+        label: labelByUserId.get(uid) ?? uid,
+      };
+    }
+
+    return { ...r, ban_target_suggestion: suggestion };
+  });
 }
 
 function jsonError(message: string, status: number) {
@@ -278,12 +364,15 @@ export async function GET(req: Request) {
         comment_content: c.content,
         video_id: c.video_id,
         video_title: titleRaw.trim() ? titleRaw : null,
+        comment_author_user_id: c.user_id,
         comment_author_display: authorDisplayByUser.get(c.user_id) ?? null,
         parent_comment_snippet: c.parent_id ? parentSnippet.get(c.parent_id) ?? null : null,
       };
       return { ...(r as ModerationReportRow), moderation_context: ctx };
     });
   }
+
+  enrichedReports = await attachBanTargetSuggestions(svc, enrichedReports);
 
   const body: ModerationReportsListResponse = {
     reports: enrichedReports,
