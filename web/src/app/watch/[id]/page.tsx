@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/app-header";
 import { ContentUnavailableStub } from "@/components/public-content/content-unavailable-stub";
@@ -19,6 +20,44 @@ type WatchPageProps = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ list?: string }>;
 };
+
+export async function generateMetadata({ params }: WatchPageProps): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createSupabaseServerClient();
+  const { data: row, error } = await supabase
+    .from("videos")
+    .select("title, description, thumbnail_url, visibility")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !row) {
+    return { title: "Видео" };
+  }
+
+  const v = row as {
+    title: string;
+    description: string | null;
+    thumbnail_url: string | null;
+    visibility: string;
+  };
+
+  const noIndex = v.visibility === "private" || v.visibility === "unlisted";
+  const description =
+    v.description?.replace(/\s+/g, " ").trim().slice(0, 160) ||
+    `Смотреть «${v.title}» на ПОТОК`;
+
+  return {
+    title: v.title,
+    description,
+    robots: noIndex ? { index: false, follow: false } : { index: true, follow: true },
+    openGraph: {
+      title: v.title,
+      description,
+      type: "video.other",
+      images: v.thumbnail_url ? [v.thumbnail_url] : undefined,
+    },
+  };
+}
 
 export default async function WatchPage({ params, searchParams }: WatchPageProps) {
   const { id } = await params;

@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalDocShell } from "@/components/legal/legal-doc-shell";
+
+export const metadata: Metadata = {
+  title: "Пользовательское соглашение",
+  description: "Публичная оферта и пользовательское соглашение сервиса ПОТОК.",
+};
 
 export default function UserAgreementPage() {
   return (

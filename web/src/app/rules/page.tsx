@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalDocShell } from "@/components/legal/legal-doc-shell";
+
+export const metadata: Metadata = {
+  title: "Правила сервиса",
+  description:
+    "Правила сервиса ПОТОК: модерация, жалобы, сообщество, самозаморозка канала и обработка данных.",
+};
 
 export default function ServiceRulesPage() {
   return (

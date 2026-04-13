@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
+import { getMetadataBase } from "@/lib/site-url";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +16,26 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ПОТОК",
+  metadataBase: getMetadataBase(),
+  title: {
+    default: "ПОТОК — видеоплатформа",
+    template: "%s · ПОТОК",
+  },
   description: "Видеоплатформа: просмотр, каналы, подписки",
+  applicationName: "ПОТОК",
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    siteName: "ПОТОК",
+    title: "ПОТОК — видеоплатформа",
+    description: "Видеоплатформа: просмотр, каналы, подписки",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ПОТОК",
+    description: "Видеоплатформа: просмотр, каналы, подписки",
+  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport = {

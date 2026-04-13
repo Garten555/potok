@@ -332,6 +332,8 @@ function StudioInner() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const previewUrlRef = useRef("");
   const thumbnailPreviewUrlRef = useRef("");
+  /** Пока идёт автозахват кадров, не перезаписывать превью, если пользователь уже выбрал свою обложку. */
+  const customThumbnailActiveRef = useRef(false);
   const frameVideoRef = useRef<HTMLVideoElement | null>(null);
   const thumbCandidatesRef = useRef<ThumbCandidate[]>([]);
   const [thumbCandidates, setThumbCandidates] = useState<ThumbCandidate[]>([]);
@@ -340,6 +342,8 @@ function StudioInner() {
   const [thumbCandidatesError, setThumbCandidatesError] = useState("");
   /** Обложка для Plyr (не первый кадр видео), синхронизируется с выбранным превью */
   const [studioPlayerPosterUrl, setStudioPlayerPosterUrl] = useState<string | undefined>(undefined);
+  /** Для UI сетки кадров: своя картинка вместо одного из авто-кадров */
+  const [isCustomThumbnail, setIsCustomThumbnail] = useState(false);
   const studioPosterUrlRef = useRef<string | undefined>(undefined);
   studioPosterUrlRef.current = studioPlayerPosterUrl;
   const applyStudioPosterRef = useRef<(() => void) | null>(null);
@@ -486,6 +490,8 @@ function StudioInner() {
       setPreviewUrl("");
       studioPosterUrlRef.current = undefined;
       setStudioPlayerPosterUrl(undefined);
+      customThumbnailActiveRef.current = false;
+      setIsCustomThumbnail(false);
       setPlayerKey((prevKey) => prevKey + 1);
       return;
     }
@@ -508,6 +514,8 @@ function StudioInner() {
     if (prevThumb?.startsWith("blob:")) URL.revokeObjectURL(prevThumb);
     thumbnailPreviewUrlRef.current = "";
     setThumbnailFile(null);
+    customThumbnailActiveRef.current = false;
+    setIsCustomThumbnail(false);
   };
 
   const replaceThumbnailPreviewFromFile = (file: File | null) => {
@@ -520,6 +528,8 @@ function StudioInner() {
       thumbnailPreviewUrlRef.current = "";
       studioPosterUrlRef.current = undefined;
       setStudioPlayerPosterUrl(undefined);
+      customThumbnailActiveRef.current = false;
+      setIsCustomThumbnail(false);
       return;
     }
     const next = URL.createObjectURL(file);
@@ -527,6 +537,8 @@ function StudioInner() {
     studioPosterUrlRef.current = next;
     setStudioPlayerPosterUrl(next);
     setSelectedThumbCandidateId(null); // User uploaded their own cover.
+    customThumbnailActiveRef.current = true;
+    setIsCustomThumbnail(true);
   };
 
   const revokeCandidatesPreviews = (candidates: ThumbCandidate[]) => {
@@ -639,12 +651,17 @@ function StudioInner() {
       thumbCandidatesRef.current = candidates;
 
       const first = candidates[0];
-      if (first) {
+      if (first && !customThumbnailActiveRef.current) {
         setSelectedThumbCandidateId(first.id);
         setThumbnailFile(first.file);
         thumbnailPreviewUrlRef.current = first.previewUrl;
         studioPosterUrlRef.current = first.previewUrl;
         setStudioPlayerPosterUrl(first.previewUrl);
+        queueMicrotask(() => {
+          applyStudioPosterRef.current?.();
+          requestAnimationFrame(() => applyStudioPosterRef.current?.());
+        });
+      } else if (first && customThumbnailActiveRef.current) {
         queueMicrotask(() => {
           applyStudioPosterRef.current?.();
           requestAnimationFrame(() => applyStudioPosterRef.current?.());
@@ -1475,6 +1492,8 @@ function StudioInner() {
   };
 
   const onSelectThumbCandidate = useCallback((c: ThumbCandidate) => {
+    customThumbnailActiveRef.current = false;
+    setIsCustomThumbnail(false);
     setSelectedThumbCandidateId(c.id);
     setThumbnailFile(c.file);
     thumbnailPreviewUrlRef.current = c.previewUrl;
@@ -1595,6 +1614,8 @@ function StudioInner() {
               setThumbnailFile={setThumbnailFile}
               thumbCandidatesError={thumbCandidatesError}
               replaceThumbnailPreviewFromFile={replaceThumbnailPreviewFromFile}
+              isCustomThumbnail={isCustomThumbnail}
+              activeThumbnailPreviewUrl={studioPlayerPosterUrl}
               error={error}
               success={success}
               source={source}

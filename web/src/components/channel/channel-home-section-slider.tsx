@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import clsx from "clsx";
@@ -39,6 +39,12 @@ export function ChannelHomeSectionSlider({
     setCanScrollRight(max > 2 && scrollLeft < max - 2);
   }, []);
 
+  useLayoutEffect(() => {
+    updateScrollState();
+    const id = requestAnimationFrame(() => updateScrollState());
+    return () => cancelAnimationFrame(id);
+  }, [updateScrollState, videos.length]);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -70,14 +76,18 @@ export function ChannelHomeSectionSlider({
     );
   }
 
-  const showOverlayArrows = videos.length > 1;
+  /** Стрелки только при 4+ видео — при 1–3 карточках ряд обычно помещается без скролла. */
+  const showOverlayArrows = videos.length > 3;
   const showPlayAll = Boolean(playAllHref) && showPlayAllButton;
 
+  /** Когда ряд целиком помещается без скролла, переполнения нет — стрелки всё равно показываем, но приглушённые (как подсказка UI). */
   const arrowBtnClass = (enabled: boolean) =>
     clsx(
-      "pointer-events-auto absolute top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 touch-manipulation place-items-center rounded-full text-white shadow-lg transition sm:h-11 sm:w-11",
-      "bg-black/65 hover:bg-black/85 active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
-      enabled ? "opacity-100" : "pointer-events-none opacity-0",
+      "absolute top-1/2 z-30 grid h-10 w-10 -translate-y-1/2 touch-manipulation place-items-center rounded-full text-white shadow-lg transition sm:h-11 sm:w-11",
+      "bg-black/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
+      enabled
+        ? "cursor-pointer opacity-100 hover:bg-black/88 active:scale-[0.96]"
+        : "cursor-default opacity-[0.38] saturate-50",
     );
 
   return (

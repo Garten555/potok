@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -35,6 +36,34 @@ function thumbFromJoinedVideos(
 type ChannelPageProps = {
   params: Promise<{ handle: string }>;
 };
+
+export async function generateMetadata({ params }: ChannelPageProps): Promise<Metadata> {
+  const { handle } = await params;
+  const supabase = await createSupabaseServerClient();
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("channel_name, channel_handle, avatar_url")
+    .ilike("channel_handle", handle)
+    .maybeSingle();
+
+  if (error || !user) {
+    return { title: "Канал" };
+  }
+
+  const u = user as { channel_name: string; channel_handle: string; avatar_url: string | null };
+  const title = `${u.channel_name} (@${u.channel_handle})`;
+  const description = `Канал ${u.channel_name} на видеосервисе ПОТОК`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: u.avatar_url ? [u.avatar_url] : undefined,
+    },
+  };
+}
 
 export default async function ChannelPage({ params }: ChannelPageProps) {
   const { handle } = await params;

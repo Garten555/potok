@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalDocShell } from "@/components/legal/legal-doc-shell";
+
+export const metadata: Metadata = {
+  title: "Политика персональных данных",
+  description:
+    "Политика обработки персональных данных сервиса ПОТОК в соответствии с 152-ФЗ.",
+};
 
 export default function PrivacyPolicyPage() {
   return (
